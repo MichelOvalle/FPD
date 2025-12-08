@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor de FPD")
+st.title("📊 Monitor de FPD2 (Ventana Móvil)")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -418,6 +418,9 @@ with tab3:
             color_continuous_scale='RdYlGn_r',
             aspect="auto"
         )
+        # --- APLICACIÓN DEL FIX ---
+        fig_heat.update_xaxes(type='category') 
+        # ---------------------------
         fig_heat.update_layout(title="Evolución del Riesgo por Región")
         st.plotly_chart(fig_heat, use_container_width=True)
 
