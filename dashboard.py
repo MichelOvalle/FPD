@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor de FPD2 (Ventana Móvil)")
+st.title("📊 Monitor FPD") # <--- TÍTULO MODIFICADO
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
