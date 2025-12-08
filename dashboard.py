@@ -105,23 +105,26 @@ def load_data():
 # Cargar DATOS
 df = load_data()
 
-# --- 3. FILTROS ---
+# --- 3. CONFIGURACIÓN DE VENTANA DE TIEMPO (AHORA FIJA) ---
 todas = sorted(df['cosecha_x'].unique())
 maduras = todas[:-MESES_A_EXCLUIR] if len(todas) > MESES_A_EXCLUIR else todas
 visualizar = maduras[-VENTANA_MESES:] if len(maduras) > VENTANA_MESES else maduras
 
+# Establecer la cosecha seleccionada (Top Dashboard) al rango fijo
+sel_cosecha = visualizar
+
+# --- 4. FILTROS DE NEGOCIO EN BARRA LATERAL ---
 st.sidebar.header("🎯 Filtros Generales")
-st.sidebar.info("Nota: Los filtros aplican principalmente a la Pestaña 1. Las pestañas 2 y 3 usan datos globales o calculados estratégicamente.")
-sel_cosecha = st.sidebar.multiselect("1. Cosechas (Top Dashboard):", options=maduras, default=visualizar)
+st.sidebar.info("La ventana de análisis temporal (24 meses) es fija. Los filtros de negocio aplican solo a la Pestaña 1.")
 
 st.sidebar.divider()
 st.sidebar.markdown("**Filtros de Negocio**")
-sel_uni = st.sidebar.multiselect("2. Unidad Regional:", sorted(df['unidad'].unique()))
-sel_suc = st.sidebar.multiselect("3. Sucursal:", sorted(df['sucursal'].unique()))
-sel_pro = st.sidebar.multiselect("4. Producto Agrupado:", sorted(df['producto'].unique()))
-sel_tip = st.sidebar.multiselect("5. Tipo de Cliente:", sorted(df['tipo_cliente'].unique()))
+sel_uni = st.sidebar.multiselect("1. Unidad Regional:", sorted(df['unidad'].unique()))
+sel_suc = st.sidebar.multiselect("2. Sucursal:", sorted(df['sucursal'].unique()))
+sel_pro = st.sidebar.multiselect("3. Producto Agrupado:", sorted(df['producto'].unique()))
+sel_tip = st.sidebar.multiselect("4. Tipo de Cliente:", sorted(df['tipo_cliente'].unique()))
 
-# --- 4. PREPARACIÓN BASE FILTRADA (PESTAÑA 1) ---
+# --- 5. PREPARACIÓN BASE FILTRADA (PESTAÑA 1) ---
 df_base = df.copy()
 
 if sel_uni: df_base = df_base[df_base['unidad'].isin(sel_uni)]
@@ -132,6 +135,7 @@ if sel_tip: df_base = df_base[df_base['tipo_cliente'].isin(sel_tip)]
 if df_base.empty:
     st.sidebar.warning("⚠️ Los filtros seleccionados no devolvieron datos para el Monitor.")
 
+# df_top utiliza sel_cosecha (que ahora es fijo a visualizar)
 df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
 
 # =========================================================
@@ -418,9 +422,9 @@ with tab3:
             color_continuous_scale='RdYlGn_r',
             aspect="auto"
         )
-        # --- APLICACIÓN DEL FIX ---
+        # --- APLICACIÓN DEL FIX PARA EL FORMATO DE COSECHA ---
         fig_heat.update_xaxes(type='category') 
-        # ---------------------------
+        # ----------------------------------------------------
         fig_heat.update_layout(title="Evolución del Riesgo por Región")
         st.plotly_chart(fig_heat, use_container_width=True)
 
