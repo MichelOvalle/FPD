@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD")
+st.title("📊 Monitor FPD") # V36 Title
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -16,6 +16,7 @@ MIN_CREDITOS_RANKING = 5
 # --- 2. FUNCIÓN DE CARGA ---
 def load_data():
     
+    # Buscamos el archivo directamente en la carpeta del script (GitHub/Local)
     archivo = 'fpd gemini.xlsx'
     if not os.path.exists(archivo):
         archivo = 'fpd gemini.csv'
@@ -130,7 +131,7 @@ df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
 
 # =========================================================
 # --- CÁLCULO CENTRALIZADO DEL BOTTOM 10 DE SUCURSALES ---
-# (Basado en la misma data filtrada que Tab 1)
+# (Usado por Tab 1 y Tab 2 - Bloque 4)
 # =========================================================
 
 worst_10_sucursales = []
@@ -190,7 +191,6 @@ with tab1:
         
         st.subheader("3. Ranking de Sucursales")
         
-        # Reutilizar el cálculo r_clean_calc
         if not df_ranking_calc.empty and not r_clean_calc.empty:
             c1, c2 = st.columns(2)
             c1.dataframe(r_clean_calc.sort_values('mean', ascending=False).head(10)[['sucursal', 'count', 'mean']].rename(columns={'mean': 'FPD2 %'}), hide_index=True, use_container_width=True, column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())})
