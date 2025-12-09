@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD v7")
+st.title("📊 Monitor FPD v8")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -456,8 +456,11 @@ with tab2:
                 if rate_columns_for_style:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_for_style) \
-                        .set_properties(**{'font-size': '10pt'}) \
-                        .hide(axis=1, subset=idx[:, 'FPD_Tasa_Float']) # Ocultamos la columna flotante
+                        .set_properties(**{'font-size': '10pt'}) 
+                    
+                    # *** ELIMINACIÓN FORZADA DE LA COLUMNA OCULTA ***
+                    # Usamos .drop en el DataFrame subyacente de la tabla estilizada antes de renderizar (solución al bug)
+                    styled_table.data.drop(columns=rate_columns_for_style, level='Métrica', inplace=True)
                 else:
                     styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
                 
