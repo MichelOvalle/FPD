@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD v9")
+st.title("📊 Monitor FPD")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -420,53 +420,31 @@ with tab2:
                 pivot_data = df_detalle.groupby(['sucursal', 'producto']).agg(
                     FPD_Casos=('is_fpd2', 'sum'),
                     Total_Casos=('is_fpd2', 'count'),
-                    FPD_Tasa_Float=('is_fpd2', 'mean') # Tasa flotante para el estilo
+                    FPD_Tasa=('is_fpd2', 'mean') 
                 ).reset_index()
                 
-                # *** SOLUCIÓN DE FORMATO (Fuerza string para enteros y porcentajes) ***
+                # *** V52: ELIMINAR STYLER Y FORZAR FORMATO DE TEXTO ***
+                # Convertir Casos a string (entero)
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
-                pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa_Float'] * 100).map('{:.2f}%'.format).astype(str)
+                
+                # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
+                pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
-                # Incluimos FPD_Tasa_Float (para el estilo) y FPD_Tasa (para el texto)
+                # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
                     columns='producto',
-                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa', 'FPD_Tasa_Float'] 
+                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
                 # Asegurar el orden de las columnas: Producto en Nivel 0 y Métrica en Nivel 1
                 table_pivot = table_pivot.swaplevel(axis=1) # Producto | Métrica
                 table_pivot.columns.names = ['Producto', 'Métrica']
                 
-                # 5. Aplicar formato y estilo
-                idx = pd.IndexSlice
-                existing_products = table_pivot.columns.get_level_values('Producto').unique()
-                
-                # Selector para la columna numérica (FPD_Tasa_Float) que usamos para el estilo
-                rate_columns_for_style = [
-                    (p, 'FPD_Tasa_Float') for p in existing_products if ('FPD_Tasa_Float' in table_pivot[p].columns)
-                ]
-
-                # Aplicar estilo:
-                if rate_columns_for_style:
-                    styled_table = table_pivot.style \
-                        .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_for_style) \
-                        .set_properties(**{'font-size': '10pt'}) 
-                    
-                    # *** CORRECCIÓN CLAVE PARA KEYERROR ***
-                    # Debemos eliminar las etiquetas del nivel que contiene los NOMBRES DE PRODUCTO (Nivel 0)
-                    # Y no del nivel Métrica, ya que rate_columns_for_style es una lista de tuplas ('Producto', 'Métrica').
-                    try:
-                         styled_table.data.drop(columns=rate_columns_for_style, level='Producto', inplace=True)
-                    except KeyError as e:
-                         # Si el drop falla (p.ej. ya se eliminó), al menos el resto de la tabla se renderiza
-                         st.warning(f"Error al intentar ocultar la columna flotante: {e}. La tabla principal se mostrará correctamente.")
-                         
-                else:
-                    # Aplicar estilo simple si no hay datos para el mapa de calor
-                    styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
+                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, NO BACKGROUND GRADIENT NI HIDE
+                styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
