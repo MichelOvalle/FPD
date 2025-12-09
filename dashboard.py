@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD v5")
+st.title("📊 Monitor FPD  v6")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -420,45 +420,47 @@ with tab2:
                 pivot_data = df_detalle.groupby(['sucursal', 'producto']).agg(
                     FPD_Casos=('is_fpd2', 'sum'),
                     Total_Casos=('is_fpd2', 'count'),
-                    FPD_Tasa=('is_fpd2', 'mean')
+                    FPD_Tasa_Float=('is_fpd2', 'mean') # Tasa flotante para el estilo
                 ).reset_index()
                 
-                # *** SOLUCIÓN FINAL AL BUG DE ENTEROS: CONVERTIR A TEXTO ANTES DEL PIVOT ***
-                # Convertir Casos y Total a string con formato de entero para asegurar que no salgan decimales
+                # *** SOLUCIÓN AL BUG: CONVERTIR A TEXTO ANTES DEL PIVOT ***
+                # Convertir Casos a string (entero)
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
-                # La tasa FPD la dejamos como float para el styling
+                
+                # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
+                pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa_Float'] * 100).map('{:.2f}%'.format)
 
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
+                # Omitimos la columna 'FPD_Tasa_Float' del pivot, ya que solo es para el styling
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
-                    columns='producto'
+                    columns='producto',
+                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa', 'FPD_Tasa_Float'] 
                 )
-                table_pivot.columns.names = ['Producto', 'Métrica']
+                table_pivot.columns.names = ['Métrica', 'Producto'] # Ahora Métrica va primero en el MultiIndex
+
+                # Renombramos para que el styling funcione con la columna flotante
+                # El background_gradient necesita que la columna esté en el df, pero luego la ocultamos
+                table_pivot = table_pivot.swaplevel(axis=1) # Producto | Métrica
                 
                 # 5. Aplicar formato y estilo
                 idx = pd.IndexSlice
                 existing_products = table_pivot.columns.get_level_values('Producto').unique()
                 
-                # Selector para las columnas de Tasa (que son las únicas que quedan como float)
-                rate_columns_safe = [
-                    (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
+                # Selector para la columna numérica (FPD_Tasa_Float) que usamos para el estilo
+                rate_columns_for_style = [
+                    (p, 'FPD_Tasa_Float') for p in existing_products if ('FPD_Tasa_Float' in table_pivot[p].columns)
                 ]
 
-                # Aplicar estilo:
-                if rate_columns_safe:
+                # 5. Aplicar estilo:
+                if rate_columns_for_style:
                     styled_table = table_pivot.style \
-                        .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
-                        .format({
-                            # *** SOLUCIÓN AL BUG DE PORCENTAJE: FORZAR CON LAMBDA ***
-                            idx[:, 'FPD_Tasa']: lambda x: f'{x * 100:.2f}%'
-                        }) \
-                        .set_properties(**{'font-size': '10pt'})
+                        .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_for_style) \
+                        .set_properties(**{'font-size': '10pt'}) \
+                        .hide(axis=1, subset=idx[:, 'FPD_Tasa_Float']) # Ocultamos la columna flotante
                 else:
-                    styled_table = table_pivot.style \
-                        .format({
-                            idx[:, 'FPD_Tasa']: lambda x: f'{x * 100:.2f}%'
-                        })
+                    styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
