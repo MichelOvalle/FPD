@@ -205,21 +205,32 @@ with tab1:
         if not df_ranking_calc.empty and not r_clean_calc.empty:
             c1, c2 = st.columns(2)
             
-            # *** CAMBIO V54: Mostrar 'sum' (Casos FPD) en el ranking ***
-            ranking_columns = ['sucursal', 'count', 'sum', 'mean']
-            ranking_rename = {'count': 'Total Créditos', 'sum': 'Casos FPD', 'mean': 'FPD2 %'}
+            # Crear la columna FPD2 % como valor * 100 para el formato de número
+            r_clean_calc['FPD2_Pct_Display'] = r_clean_calc['mean'] * 100
+
+            # Definición de columnas para el ranking
+            ranking_columns = ['sucursal', 'count', 'sum', 'FPD2_Pct_Display']
+            ranking_rename = {'count': 'Total Créditos', 'sum': 'Casos FPD', 'FPD2_Pct_Display': 'FPD2 %'}
+
+            # *** CAMBIO CRÍTICO: Usar NumberColumn para mostrar el % correcto y mantener el estilo ***
+            column_config = {
+                "FPD2_Pct_Display": st.column_config.NumberColumn(
+                    "FPD2 %", 
+                    format="%.2f%%", # Muestra 27.27%
+                )
+            }
 
             c1.dataframe(
                 r_clean_calc.sort_values('mean', ascending=False).head(10)[ranking_columns].rename(columns=ranking_rename), 
                 hide_index=True, 
                 use_container_width=True, 
-                column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())}
+                column_config=column_config
             )
             c2.dataframe(
                 r_clean_calc.sort_values('mean', ascending=True).head(10)[ranking_columns].rename(columns=ranking_rename), 
                 hide_index=True, 
                 use_container_width=True, 
-                column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())}
+                column_config=column_config
             )
         else:
              st.warning(f"No hay suficientes datos para la cosecha {mes_actual} para calcular el ranking.")
