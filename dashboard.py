@@ -105,7 +105,7 @@ visualizar = maduras[-VENTANA_MESES:] if len(maduras) > VENTANA_MESES else madur
 
 sel_cosecha = visualizar
 
-# **NUEVO** Definición de la última cosecha madura
+# Definición de la última cosecha madura
 mes_actual = maduras[-1] if len(maduras) >= 1 else None
 mes_anterior = maduras[-2] if len(maduras) >= 2 else None
 
@@ -152,11 +152,12 @@ if not df_ranking_base.empty:
     mask_nomina = df_ranking_base['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
     df_ranking_calc = df_ranking_base[~(mask_999 | mask_nomina)]
     
-    r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'mean']).reset_index()
+    # 2. Agregar 'sum' para contar los casos FPD
+    r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'sum', 'mean']).reset_index()
     
     r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
 
-    # 2. Obtener el Bottom 10 (peores tasas)
+    # 3. Obtener el Bottom 10 (peores tasas)
     if not r_clean_calc.empty:
         bottom_10_df = r_clean_calc.sort_values('mean', ascending=False).head(10)
         worst_10_sucursales = bottom_10_df['sucursal'].tolist()
@@ -203,8 +204,23 @@ with tab1:
         
         if not df_ranking_calc.empty and not r_clean_calc.empty:
             c1, c2 = st.columns(2)
-            c1.dataframe(r_clean_calc.sort_values('mean', ascending=False).head(10)[['sucursal', 'count', 'mean']].rename(columns={'mean': 'FPD2 %'}), hide_index=True, use_container_width=True, column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())})
-            c2.dataframe(r_clean_calc.sort_values('mean', ascending=True).head(10)[['sucursal', 'count', 'mean']].rename(columns={'mean': 'FPD2 %'}), hide_index=True, use_container_width=True, column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())})
+            
+            # *** CAMBIO V54: Mostrar 'sum' (Casos FPD) en el ranking ***
+            ranking_columns = ['sucursal', 'count', 'sum', 'mean']
+            ranking_rename = {'count': 'Total Créditos', 'sum': 'Casos FPD', 'mean': 'FPD2 %'}
+
+            c1.dataframe(
+                r_clean_calc.sort_values('mean', ascending=False).head(10)[ranking_columns].rename(columns=ranking_rename), 
+                hide_index=True, 
+                use_container_width=True, 
+                column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())}
+            )
+            c2.dataframe(
+                r_clean_calc.sort_values('mean', ascending=True).head(10)[ranking_columns].rename(columns=ranking_rename), 
+                hide_index=True, 
+                use_container_width=True, 
+                column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())}
+            )
         else:
              st.warning(f"No hay suficientes datos para la cosecha {mes_actual} para calcular el ranking.")
 
@@ -277,7 +293,7 @@ with tab2:
     if len(maduras) < 2:
         st.error("No hay suficientes cosechas maduras.")
     else:
-        # mes_actual y mes_anterior ya están definidos al inicio
+        # mes_actual y mes_anterior están definidos al inicio
         
         # --- BLOQUE 1: UNIDAD REGIONAL (GLOBAL) ---
         st.markdown(f"#### 🌍 Análisis Regional ({mes_actual})")
