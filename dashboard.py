@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD..")
+st.title("📊 Monitor FPD v5")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -423,7 +423,7 @@ with tab2:
                     FPD_Tasa=('is_fpd2', 'mean')
                 ).reset_index()
                 
-                # *** SOLUCIÓN FINAL AL BUG: CONVERTIR A TEXTO ANTES DEL PIVOT ***
+                # *** SOLUCIÓN FINAL AL BUG DE ENTEROS: CONVERTIR A TEXTO ANTES DEL PIVOT ***
                 # Convertir Casos y Total a string con formato de entero para asegurar que no salgan decimales
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
@@ -445,19 +445,19 @@ with tab2:
                     (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
                 ]
 
-                # Aplicar estilo: solo el porcentaje necesita styling, los casos ya son strings
+                # Aplicar estilo:
                 if rate_columns_safe:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
                         .format({
-                            # Solo formateamos la tasa, Casos y Total ya son strings
-                            idx[:, 'FPD_Tasa']: "{:.2%}" 
+                            # *** SOLUCIÓN AL BUG DE PORCENTAJE: FORZAR CON LAMBDA ***
+                            idx[:, 'FPD_Tasa']: lambda x: f'{x * 100:.2f}%'
                         }) \
                         .set_properties(**{'font-size': '10pt'})
                 else:
                     styled_table = table_pivot.style \
                         .format({
-                            idx[:, 'FPD_Tasa']: "{:.2%}"
+                            idx[:, 'FPD_Tasa']: lambda x: f'{x * 100:.2f}%'
                         })
                 
                 st.dataframe(styled_table, use_container_width=True)
