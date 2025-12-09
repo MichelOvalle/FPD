@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD crv4")
+st.title("📊 Monitor FPD crv5")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -143,7 +143,9 @@ if not df_top.empty:
     df_ranking_calc = df_top[~(mask_999 | mask_nomina)]
     
     r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'mean']).reset_index()
-    r_clean_calc = r_calc[r_clean_calc['count'] >= MIN_CREDITOS_RANKING]
+    
+    # *** CORRECCIÓN V57: Se utiliza r_calc para definir r_clean_calc ***
+    r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
 
     # 2. Obtener el Bottom 10 (peores tasas)
     if not r_clean_calc.empty:
@@ -431,7 +433,7 @@ with tab2:
                 # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
-                # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
+                # 4. Pivotar la tabla (creando índice múltiple: Métrica | Producto)
                 # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
@@ -440,7 +442,7 @@ with tab2:
                 )
                 
                 # *** CORRECCIÓN CLAVE V56: REINTRODUCIR swaplevel() para forzar el orden (Métrica, Producto) ***
-                # Esto es necesario si el entorno de Streamlit/Pandas está invirtiendo el orden por defecto.
+                # Si el orden predeterminado no funciona, forzamos la inversión.
                 table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
                 
                 # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
