@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD cr")
+st.title("📊 Monitor FPD crv2")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -431,7 +431,7 @@ with tab2:
                 # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
-                # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
+                # 4. Pivotar la tabla (creando índice múltiple: Métrica | Producto)
                 # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
@@ -439,10 +439,9 @@ with tab2:
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # *** CORRECCIÓN CLAVE: INVERTIR NIVELES ***
-                # Primero, invertimos para poner las Métricas arriba (índice 0)
-                table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
-                # Establecer los nombres de los niveles para reflejar el nuevo orden
+                # *** CORRECCIÓN CLAVE V54: SE ELIMINA swaplevel() ***
+                # El comportamiento por defecto de pivot es (Métrica, Producto), que es el deseado.
+                # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
                 table_pivot.columns.names = ['Métrica', 'Producto']
 
                 # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, SIN BACKGROUND GRADIENT NI HIDE
