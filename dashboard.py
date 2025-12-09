@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD")
+st.title("📊 Monitor FPD cr")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -439,11 +439,13 @@ with tab2:
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # Asegurar el orden de las columnas: Producto en Nivel 0 y Métrica en Nivel 1
-                table_pivot = table_pivot.swaplevel(axis=1) # Producto | Métrica
-                table_pivot.columns.names = ['Producto', 'Métrica']
-                
-                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, NO BACKGROUND GRADIENT NI HIDE
+                # *** CORRECCIÓN CLAVE: INVERTIR NIVELES ***
+                # Primero, invertimos para poner las Métricas arriba (índice 0)
+                table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
+                # Establecer los nombres de los niveles para reflejar el nuevo orden
+                table_pivot.columns.names = ['Métrica', 'Producto']
+
+                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, SIN BACKGROUND GRADIENT NI HIDE
                 styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
                 
                 st.dataframe(styled_table, use_container_width=True)
