@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD") # V36 Title
+st.title("📊 Monitor FPD")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -131,7 +131,6 @@ df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
 
 # =========================================================
 # --- CÁLCULO CENTRALIZADO DEL BOTTOM 10 DE SUCURSALES ---
-# (Usado por Tab 1 y Tab 2 - Bloque 4)
 # =========================================================
 
 worst_10_sucursales = []
@@ -405,7 +404,7 @@ with tab2:
         
         # --- BLOQUE 4: DETALLE PRODUCTO POR SUCURSAL (BOTTOM 10) ---
         st.markdown("#### 4. Detalle de Riesgo por Producto y Sucursal (Bottom 10)")
-        st.markdown("⚠️ **Nota:** Esta tabla muestra solo las **10 sucursales con mayor FPD** según los filtros de negocio aplicados en el panel lateral.")
+        st.markdown("⚠️ **Nota:** Esta tabla muestra **(Casos FPD | Total Casos | % FPD)** para las **10 sucursales con mayor riesgo**, según los filtros de negocio aplicados.")
 
         if worst_10_sucursales:
             # 1. Usar df_base (filtrado por sidebar) y el mes actual
@@ -414,23 +413,39 @@ with tab2:
             # 2. FILTRAR POR EL BOTTOM 10 CALCULADO
             df_detalle = df_detalle[df_detalle['sucursal'].isin(worst_10_sucursales)]
             
-            # Limpieza básica para evitar outliers
             df_detalle = df_detalle[~df_detalle['sucursal'].astype(str).str.contains("999", na=False)]
             
             if not df_detalle.empty:
-                # 3. Calcular FPD % por Sucursal y Producto
-                pivot_data = df_detalle.groupby(['sucursal', 'producto'])['is_fpd2'].mean().reset_index()
+                # 3. Calcular FPD % / Casos / Total por Sucursal y Producto
+                pivot_data = df_detalle.groupby(['sucursal', 'producto'])['is_fpd2'].agg(
+                    FPD_Casos='sum', 
+                    Total_Casos='count', 
+                    FPD_Tasa='mean'
+                ).reset_index()
                 
-                # 4. Pivotar la tabla
-                table_pivot = pivot_data.pivot(index='sucursal', columns='producto', values='is_fpd2')
-                
-                # 5. Aplicar formato condicional (Heatmap)
-                st.dataframe(
-                    table_pivot.style
-                    .background_gradient(cmap='RdYlGn_r', axis=None) 
-                    .format("{:.2%}", na_rep="-"),
-                    use_container_width=True
+                # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
+                table_pivot = pivot_data.pivot(
+                    index='sucursal', 
+                    columns='producto'
                 )
+                table_pivot.columns.names = ['Producto', 'Métrica']
+                
+                # Definir alias para las columnas de Tasa (necesario para el Background Gradient)
+                idx = pd.IndexSlice
+                rate_columns = table_pivot.loc[:, idx[:, 'FPD_Tasa']]
+                
+                # 5. Aplicar formato y estilo
+                styled_table = table_pivot.style \
+                    .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns) \
+                    .format({
+                        # Formateo de las métricas dentro del índice múltiple
+                        idx[:, 'FPD_Casos']: "{:,.0f}",
+                        idx[:, 'Total_Casos']: "{:,.0f}",
+                        idx[:, 'FPD_Tasa']: "{:.2%}"
+                    }) \
+                    .set_properties(**{'font-size': '10pt'})
+                
+                st.dataframe(styled_table, use_container_width=True)
             else:
                 st.warning(f"No hay datos para la cosecha {mes_actual} con el Bottom 10 de sucursales filtrado.")
 
