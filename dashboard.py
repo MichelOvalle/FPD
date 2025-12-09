@@ -105,6 +105,10 @@ visualizar = maduras[-VENTANA_MESES:] if len(maduras) > VENTANA_MESES else madur
 
 sel_cosecha = visualizar
 
+# **NUEVO** Definición de la última cosecha madura
+mes_actual = maduras[-1] if len(maduras) >= 1 else None
+mes_anterior = maduras[-2] if len(maduras) >= 2 else None
+
 # --- 4. FILTROS DE NEGOCIO EN BARRA LATERAL ---
 st.sidebar.header("🎯 Filtros Generales")
 st.sidebar.info("La ventana de análisis temporal (24 meses) es fija. Los filtros de negocio aplican solo a la Pestaña 1.")
@@ -136,13 +140,20 @@ df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
 worst_10_sucursales = []
 df_ranking_calc = pd.DataFrame()
 
-if not df_top.empty:
+# *** CAMBIO: Usar solo la última cosecha madura para el ranking de la Pestaña 1 ***
+if mes_actual and not df_base.empty:
+    df_ranking_base = df_base[df_base['cosecha_x'] == mes_actual].copy()
+else:
+    df_ranking_base = pd.DataFrame()
+
+if not df_ranking_base.empty:
     # 1. Base para el Ranking (Excluir '999' y 'nomina')
-    mask_999 = df_top['sucursal'].astype(str).str.contains("999", na=False)
-    mask_nomina = df_top['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
-    df_ranking_calc = df_top[~(mask_999 | mask_nomina)]
+    mask_999 = df_ranking_base['sucursal'].astype(str).str.contains("999", na=False)
+    mask_nomina = df_ranking_base['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
+    df_ranking_calc = df_ranking_base[~(mask_999 | mask_nomina)]
     
     r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'mean']).reset_index()
+    
     r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
 
     # 2. Obtener el Bottom 10 (peores tasas)
@@ -188,12 +199,15 @@ with tab1:
 
         st.divider()
         
-        st.subheader("3. Ranking de Sucursales")
+        st.subheader(f"3. Ranking de Sucursales (Cosecha {mes_actual})") # Actualiza el título
         
         if not df_ranking_calc.empty and not r_clean_calc.empty:
             c1, c2 = st.columns(2)
             c1.dataframe(r_clean_calc.sort_values('mean', ascending=False).head(10)[['sucursal', 'count', 'mean']].rename(columns={'mean': 'FPD2 %'}), hide_index=True, use_container_width=True, column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())})
             c2.dataframe(r_clean_calc.sort_values('mean', ascending=True).head(10)[['sucursal', 'count', 'mean']].rename(columns={'mean': 'FPD2 %'}), hide_index=True, use_container_width=True, column_config={"FPD2 %": st.column_config.ProgressColumn("FPD2 %", format="%.2f%%", min_value=0, max_value=r_clean_calc['mean'].max())})
+        else:
+             st.warning(f"No hay suficientes datos para la cosecha {mes_actual} para calcular el ranking.")
+
 
         st.divider()
         
@@ -263,8 +277,7 @@ with tab2:
     if len(maduras) < 2:
         st.error("No hay suficientes cosechas maduras.")
     else:
-        mes_actual = maduras[-1]
-        mes_anterior = maduras[-2]
+        # mes_actual y mes_anterior ya están definidos al inicio
         
         # --- BLOQUE 1: UNIDAD REGIONAL (GLOBAL) ---
         st.markdown(f"#### 🌍 Análisis Regional ({mes_actual})")
@@ -423,29 +436,46 @@ with tab2:
                     FPD_Tasa=('is_fpd2', 'mean') 
                 ).reset_index()
                 
-                # *** V52: ELIMINAR STYLER Y FORZAR FORMATO DE TEXTO ***
                 # Convertir Casos a string (entero)
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
                 
-                # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
+                # Crear columna de tasa FPD como STRING con formato de porcentaje
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
-                # 4. Pivotar la tabla (creando índice múltiple: Métrica | Producto)
-                # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
+                # 4. Pivotar la tabla
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
                     columns='producto',
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # *** CORRECCIÓN CLAVE V54: SE ELIMINA swaplevel() ***
-                # El comportamiento por defecto de pivot es (Métrica, Producto), que es el deseado.
-                # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
+                # ** V54: Invertir niveles para tener Métrica | Producto (o la configuración deseada) **
+                table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
+                
+                # Establecer los nombres de los niveles
                 table_pivot.columns.names = ['Métrica', 'Producto']
 
-                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, SIN BACKGROUND GRADIENT NI HIDE
-                styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
+                # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
+                
+                # Estilos CSS para aplicar a la tabla
+                styles = [
+                    # Estilo para los encabezados de columna (th)
+                    {'selector': 'th',
+                     'props': [('background-color', '#e0f7fa'), 
+                               ('color', 'black'), 
+                               ('font-weight', 'bold'),
+                               ('font-size', '10pt')]},
+                    
+                    # Estilo para los encabezados de índice (Sucursales) - letra negra y negritas
+                    {'selector': 'tbody th', # Asegura que los nombres de las filas también sean negritas
+                     'props': [('color', 'black'), 
+                               ('font-weight', 'bold')]}
+                ]
+                
+                styled_table = table_pivot.style \
+                    .set_table_styles(styles) \
+                    .set_properties(**{'font-size': '10pt'}) 
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
@@ -492,7 +522,7 @@ with tab3:
     st.subheader("2. Ley de Pareto: ¿Quién genera el riesgo?")
     st.markdown("Identificamos qué porcentaje de sucursales concentra el 80% de los casos de FPD en la **última cosecha madura**.")
     
-    ultima = maduras[-1]
+    ultima = mes_actual # Ya está definido al inicio
     df_pareto = df[df['cosecha_x'] == ultima].copy()
     
     mask_999 = df_pareto['sucursal'].astype(str).str.contains("999", na=False)
