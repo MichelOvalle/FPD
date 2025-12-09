@@ -143,6 +143,8 @@ if not df_top.empty:
     df_ranking_calc = df_top[~(mask_999 | mask_nomina)]
     
     r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'mean']).reset_index()
+    
+    # *** CORRECCIÓN CRÍTICA DE NameError (Incluida en V54 para asegurar la funcionalidad) ***
     r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
 
     # 2. Obtener el Bottom 10 (peores tasas)
@@ -423,29 +425,46 @@ with tab2:
                     FPD_Tasa=('is_fpd2', 'mean') 
                 ).reset_index()
                 
-                # *** V52: ELIMINAR STYLER Y FORZAR FORMATO DE TEXTO ***
                 # Convertir Casos a string (entero)
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
                 
-                # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
+                # Crear columna de tasa FPD como STRING con formato de porcentaje
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
-                # 4. Pivotar la tabla (creando índice múltiple: Métrica | Producto)
-                # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
+                # 4. Pivotar la tabla
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
                     columns='producto',
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # *** CORRECCIÓN CLAVE V54: SE ELIMINA swaplevel() ***
-                # El comportamiento por defecto de pivot es (Métrica, Producto), que es el deseado.
-                # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
+                # ** V54: Invertir niveles para tener Métrica | Producto (o la configuración deseada) **
+                table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
+                
+                # Establecer los nombres de los niveles
                 table_pivot.columns.names = ['Métrica', 'Producto']
 
-                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, SIN BACKGROUND GRADIENT NI HIDE
-                styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
+                # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
+                
+                # Estilos CSS para aplicar a la tabla
+                styles = [
+                    # Estilo para los encabezados de columna (th)
+                    {'selector': 'th',
+                     'props': [('background-color', '#e0f7fa'), 
+                               ('color', 'black'), 
+                               ('font-weight', 'bold'),
+                               ('font-size', '10pt')]},
+                    
+                    # Estilo para los encabezados de índice (Sucursales) - letra negra y negritas
+                    {'selector': 'tbody th', # Asegura que los nombres de las filas también sean negritas
+                     'props': [('color', 'black'), 
+                               ('font-weight', 'bold')]}
+                ]
+                
+                styled_table = table_pivot.style \
+                    .set_table_styles(styles) \
+                    .set_properties(**{'font-size': '10pt'}) 
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
