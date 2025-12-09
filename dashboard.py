@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD crv2")
+st.title("📊 Monitor FPD crv3")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -439,13 +439,33 @@ with tab2:
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # *** CORRECCIÓN CLAVE V54: SE ELIMINA swaplevel() ***
+                # *** V54: CORRECCIÓN FINAL DE ORDEN DE NIVELES ***
                 # El comportamiento por defecto de pivot es (Métrica, Producto), que es el deseado.
-                # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
                 table_pivot.columns.names = ['Métrica', 'Producto']
 
-                # 5. Aplicar estilo: SOLO EL TAMAÑO DE FUENTE, SIN BACKGROUND GRADIENT NI HIDE
-                styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
+                # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
+                
+                # Estilos CSS para aplicar a la tabla
+                styles = [
+                    # Estilo para los encabezados de columna (th)
+                    {'selector': 'th',
+                     'props': [('background-color', '#e0f7fa'), 
+                               ('color', 'black'), 
+                               ('font-weight', 'bold'),
+                               ('font-size', '10pt')]},
+                    
+                    # Estilo para los encabezados de índice (Sucursales) - letra negra y negritas
+                    {'selector': '.index_name', # Generalmente apunta a los nombres del índice (Sucursal)
+                     'props': [('color', 'black'), 
+                               ('font-weight', 'bold')]},
+                    {'selector': 'tbody th', # Asegura que los nombres de las filas también sean negritas
+                     'props': [('color', 'black'), 
+                               ('font-weight', 'bold')]}
+                ]
+                
+                styled_table = table_pivot.style \
+                    .set_table_styles(styles) \
+                    .set_properties(**{'font-size': '10pt'}) 
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
