@@ -473,16 +473,15 @@ with tab2:
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
                 # 4. Pivotar la tabla
+                # *** CORRECCIÓN V56: NO USAR swaplevel. Esto asegura el orden (Métrica, Producto) ***
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
                     columns='producto',
-                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
+                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] # Este orden define la Métrica
                 )
                 
-                # ** V54: Invertir niveles para tener Métrica | Producto (o la configuración deseada) **
-                table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
-                
                 # Establecer los nombres de los niveles
+                # (Level 0: Métrica, Level 1: Producto)
                 table_pivot.columns.names = ['Métrica', 'Producto']
 
                 # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
