@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD v8")
+st.title("📊 Monitor FPD v9")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -423,12 +423,9 @@ with tab2:
                     FPD_Tasa_Float=('is_fpd2', 'mean') # Tasa flotante para el estilo
                 ).reset_index()
                 
-                # *** SOLUCIÓN AL BUG: CONVERTIR A TEXTO ANTES DEL PIVOT ***
-                # Convertir Casos a string (entero)
+                # *** SOLUCIÓN DE FORMATO (Fuerza string para enteros y porcentajes) ***
                 pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
                 pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
-                
-                # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa_Float'] * 100).map('{:.2f}%'.format).astype(str)
 
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
@@ -458,10 +455,17 @@ with tab2:
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_for_style) \
                         .set_properties(**{'font-size': '10pt'}) 
                     
-                    # *** ELIMINACIÓN FORZADA DE LA COLUMNA OCULTA ***
-                    # Usamos .drop en el DataFrame subyacente de la tabla estilizada antes de renderizar (solución al bug)
-                    styled_table.data.drop(columns=rate_columns_for_style, level='Métrica', inplace=True)
+                    # *** CORRECCIÓN CLAVE PARA KEYERROR ***
+                    # Debemos eliminar las etiquetas del nivel que contiene los NOMBRES DE PRODUCTO (Nivel 0)
+                    # Y no del nivel Métrica, ya que rate_columns_for_style es una lista de tuplas ('Producto', 'Métrica').
+                    try:
+                         styled_table.data.drop(columns=rate_columns_for_style, level='Producto', inplace=True)
+                    except KeyError as e:
+                         # Si el drop falla (p.ej. ya se eliminó), al menos el resto de la tabla se renderiza
+                         st.warning(f"Error al intentar ocultar la columna flotante: {e}. La tabla principal se mostrará correctamente.")
+                         
                 else:
+                    # Aplicar estilo simple si no hay datos para el mapa de calor
                     styled_table = table_pivot.style.set_properties(**{'font-size': '10pt'})
                 
                 st.dataframe(styled_table, use_container_width=True)
