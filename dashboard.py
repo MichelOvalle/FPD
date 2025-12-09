@@ -209,14 +209,16 @@ with tab1:
             r_clean_calc['FPD2_Pct_Display'] = r_clean_calc['mean'] * 100
 
             # Definición de columnas para el ranking
-            ranking_columns = ['sucursal', 'count', 'sum', 'FPD2_Pct_Display']
-            ranking_rename = {'count': 'Total Créditos', 'sum': 'Casos FPD', 'FPD2_Pct_Display': 'FPD2 %'}
+            # *** Se muestran solo 'sucursal' y 'FPD2 %' ***
+            ranking_columns = ['sucursal', 'FPD2_Pct_Display']
+            # *** Se renombra FPD2_Pct_Display a FPD2 % ***
+            ranking_rename = {'FPD2_Pct_Display': 'FPD2 %'}
 
-            # *** CAMBIO CRÍTICO: Usar NumberColumn para mostrar el % correcto y mantener el estilo ***
+            # *** CORRECCIÓN CRÍTICA: La clave debe ser el nombre renombrado ('FPD2 %') ***
             column_config = {
-                "FPD2_Pct_Display": st.column_config.NumberColumn(
+                "FPD2 %": st.column_config.NumberColumn(
                     "FPD2 %", 
-                    format="%.2f%%", # Muestra 27.27%
+                    format="%.2f%%", # Muestra con 2 decimales y el %
                 )
             }
 
