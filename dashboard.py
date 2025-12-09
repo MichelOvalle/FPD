@@ -416,7 +416,6 @@ with tab2:
             
             if not df_detalle.empty:
                 # 3. Calcular FPD % / Casos / Total por Sucursal y Producto
-                # CORRECCIÓN CLAVE: Usar la notación de diccionario para generar los nombres correctos
                 pivot_data = df_detalle.groupby(['sucursal', 'producto']).agg(
                     FPD_Casos=('is_fpd2', 'sum'),
                     Total_Casos=('is_fpd2', 'count'),
@@ -431,11 +430,8 @@ with tab2:
                 table_pivot.columns.names = ['Producto', 'Métrica']
                 
                 # 5. Aplicar formato y estilo
-                # CRÍTICO: Inicializar pd.IndexSlice (ya está hecho arriba, pero lo repetimos por seguridad)
+                # CRÍTICO: Inicializar pd.IndexSlice
                 idx = pd.IndexSlice
-                
-                # VERIFICAR SI HAY COLUMNAS DE TASA ANTES DE INDEXAR
-                # Se utiliza una lista de comprensión para verificar si las columnas existen antes de aplicar .loc
                 
                 # Obtener todos los nombres de los productos que existen en el MultiIndex
                 existing_products = table_pivot.columns.get_level_values('Producto').unique()
@@ -450,10 +446,10 @@ with tab2:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
                         .format({
-                            # Formateo de las métricas dentro del índice múltiple
-                            idx[:, 'FPD_Casos']: "{:,.0f}",
-                            idx[:, 'Total_Casos']: "{:,.0f}",
-                            idx[:, 'FPD_Tasa']: "{:.2%}"
+                            # FORMATO FINAL SOLICITADO
+                            idx[:, 'FPD_Casos']: "{:,.0f}",  # Enteros con separador
+                            idx[:, 'Total_Casos']: "{:,.0f}", # Enteros con separador
+                            idx[:, 'FPD_Tasa']: "{:.2%}" # Porcentaje con 2 decimales
                         }) \
                         .set_properties(**{'font-size': '10pt'})
                 else:
