@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD.")
+st.title("📊 Monitor FPD")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -16,7 +16,6 @@ MIN_CREDITOS_RANKING = 5
 # --- 2. FUNCIÓN DE CARGA ---
 def load_data():
     
-    # Buscamos el archivo directamente en la carpeta del script (GitHub/Local)
     archivo = 'fpd gemini.xlsx'
     if not os.path.exists(archivo):
         archivo = 'fpd gemini.csv'
@@ -417,10 +416,11 @@ with tab2:
             
             if not df_detalle.empty:
                 # 3. Calcular FPD % / Casos / Total por Sucursal y Producto
-                pivot_data = df_detalle.groupby(['sucursal', 'producto'])['is_fpd2'].agg(
-                    FPD_Casos='sum', 
-                    Total_Casos='count', 
-                    FPD_Tasa='mean'
+                # CORRECCIÓN CLAVE: Usar la notación de diccionario para generar los nombres correctos
+                pivot_data = df_detalle.groupby(['sucursal', 'producto']).agg(
+                    FPD_Casos=('is_fpd2', 'sum'),
+                    Total_Casos=('is_fpd2', 'count'),
+                    FPD_Tasa=('is_fpd2', 'mean')
                 ).reset_index()
                 
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
