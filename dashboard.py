@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD")
+st.title("📊 Monitor FPD..")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -14,7 +14,7 @@ VENTANA_MESES = 24
 MIN_CREDITOS_RANKING = 5 
 
 # --- 2. FUNCIÓN DE CARGA ---
-@st.cache_data
+@st.cache_data 
 def load_data():
     
     archivo = 'fpd gemini.xlsx'
@@ -423,10 +423,12 @@ with tab2:
                     FPD_Tasa=('is_fpd2', 'mean')
                 ).reset_index()
                 
-                # FORZAR A TIPO ENTERO antes de pivotar y aplicar estilo
-                pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int)
-                pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int)
-                
+                # *** SOLUCIÓN FINAL AL BUG: CONVERTIR A TEXTO ANTES DEL PIVOT ***
+                # Convertir Casos y Total a string con formato de entero para asegurar que no salgan decimales
+                pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
+                pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
+                # La tasa FPD la dejamos como float para el styling
+
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
@@ -438,27 +440,23 @@ with tab2:
                 idx = pd.IndexSlice
                 existing_products = table_pivot.columns.get_level_values('Producto').unique()
                 
+                # Selector para las columnas de Tasa (que son las únicas que quedan como float)
                 rate_columns_safe = [
                     (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
                 ]
 
-                # 5. Aplicar formato y estilo (SOLUCIÓN: FORZAR INTEGER Y USAR FORMATO SIMPLE)
+                # Aplicar estilo: solo el porcentaje necesita styling, los casos ya son strings
                 if rate_columns_safe:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
                         .format({
-                            # FORMATO FINAL: Enteros sin decimales, sin separador de miles
-                            idx[:, 'FPD_Casos']: "{:.0f}", 
-                            idx[:, 'Total_Casos']: "{:.0f}", 
-                            idx[:, 'FPD_Tasa']: "{:.2%}" # Porcentaje con 2 decimales
+                            # Solo formateamos la tasa, Casos y Total ya son strings
+                            idx[:, 'FPD_Tasa']: "{:.2%}" 
                         }) \
                         .set_properties(**{'font-size': '10pt'})
                 else:
-                    # Aplicar formato simple si no hay tasas disponibles para styling
                     styled_table = table_pivot.style \
                         .format({
-                            idx[:, 'FPD_Casos']: "{:.0f}",
-                            idx[:, 'Total_Casos']: "{:.0f}",
                             idx[:, 'FPD_Tasa']: "{:.2%}"
                         })
                 
