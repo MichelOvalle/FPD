@@ -430,20 +430,40 @@ with tab2:
                 )
                 table_pivot.columns.names = ['Producto', 'Métrica']
                 
-                # Definir alias para las columnas de Tasa (necesario para el Background Gradient)
-                idx = pd.IndexSlice
-                rate_columns = table_pivot.loc[:, idx[:, 'FPD_Tasa']]
-                
                 # 5. Aplicar formato y estilo
-                styled_table = table_pivot.style \
-                    .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns) \
-                    .format({
-                        # Formateo de las métricas dentro del índice múltiple
-                        idx[:, 'FPD_Casos']: "{:,.0f}",
-                        idx[:, 'Total_Casos']: "{:,.0f}",
-                        idx[:, 'FPD_Tasa']: "{:.2%}"
-                    }) \
-                    .set_properties(**{'font-size': '10pt'})
+                # CRÍTICO: Inicializar pd.IndexSlice (ya está hecho arriba, pero lo repetimos por seguridad)
+                idx = pd.IndexSlice
+                
+                # VERIFICAR SI HAY COLUMNAS DE TASA ANTES DE INDEXAR
+                # Se utiliza una lista de comprensión para verificar si las columnas existen antes de aplicar .loc
+                
+                # Obtener todos los nombres de los productos que existen en el MultiIndex
+                existing_products = table_pivot.columns.get_level_values('Producto').unique()
+                
+                # Crear un selector seguro de las columnas de Tasa FPD
+                rate_columns_safe = [
+                    (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
+                ]
+
+                # 5. Aplicar formato y estilo (Solo si hay tasas disponibles para styling)
+                if rate_columns_safe:
+                    styled_table = table_pivot.style \
+                        .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
+                        .format({
+                            # Formateo de las métricas dentro del índice múltiple
+                            idx[:, 'FPD_Casos']: "{:,.0f}",
+                            idx[:, 'Total_Casos']: "{:,.0f}",
+                            idx[:, 'FPD_Tasa']: "{:.2%}"
+                        }) \
+                        .set_properties(**{'font-size': '10pt'})
+                else:
+                    # Aplicar formato simple si no hay tasas disponibles para styling (ej. si solo hay NaNs)
+                    styled_table = table_pivot.style \
+                        .format({
+                            idx[:, 'FPD_Casos']: "{:,.0f}",
+                            idx[:, 'Total_Casos']: "{:,.0f}",
+                            idx[:, 'FPD_Tasa']: "{:.2%}"
+                        })
                 
                 st.dataframe(styled_table, use_container_width=True)
             else:
