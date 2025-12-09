@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD crv5")
+st.title("📊 Monitor FPD crv6")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -144,7 +144,7 @@ if not df_top.empty:
     
     r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'mean']).reset_index()
     
-    # *** CORRECCIÓN V57: Se utiliza r_calc para definir r_clean_calc ***
+    # CORRECCIÓN V57: Se utiliza r_calc para definir r_clean_calc
     r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
 
     # 2. Obtener el Bottom 10 (peores tasas)
@@ -433,26 +433,26 @@ with tab2:
                 # Crear columna de tasa FPD como STRING con formato de porcentaje (para la visualización)
                 pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
 
-                # 4. Pivotar la tabla (creando índice múltiple: Métrica | Producto)
-                # SOLO INCLUIMOS LAS COLUMNAS CON FORMATO GARANTIZADO
+                # 4. Pivotar la tabla
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
                     columns='producto',
                     values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] 
                 )
                 
-                # *** CORRECCIÓN CLAVE V56: REINTRODUCIR swaplevel() para forzar el orden (Métrica, Producto) ***
-                # Si el orden predeterminado no funciona, forzamos la inversión.
+                # *** V58: INVERSIÓN FORZADA Y SIMPLIFICACIÓN DEL MULTIINDEX ***
+                # 1. Forzar la inversión de niveles: (Producto, Métrica) -> (Métrica, Producto)
                 table_pivot = table_pivot.swaplevel(0, 1, axis=1) 
                 
-                # Establecer los nombres de los niveles para reflejar el orden: Métrica (Nivel 0), Producto (Nivel 1)
-                table_pivot.columns.names = ['Métrica', 'Producto']
+                # 2. Simplificar el MultiIndex a un String simple (Métrica | Producto)
+                # Esto garantiza que solo haya una fila de encabezado visible y que los nombres de métrica estén al inicio.
+                table_pivot.columns = [f'{col[0]} | {col[1]}'.strip() for col in table_pivot.columns.values]
 
                 # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
                 
                 # Estilos CSS para aplicar a la tabla
                 styles = [
-                    # Estilo para los encabezados de columna (th)
+                    # Estilo para los encabezados de columna (th) - Fondo Celeste y Negritas
                     {'selector': 'th',
                      'props': [('background-color', '#e0f7fa'), 
                                ('color', 'black'), 
@@ -460,10 +460,7 @@ with tab2:
                                ('font-size', '10pt')]},
                     
                     # Estilo para los encabezados de índice (Sucursales) - letra negra y negritas
-                    {'selector': '.index_name', # Generalmente apunta a los nombres del índice (Sucursal)
-                     'props': [('color', 'black'), 
-                               ('font-weight', 'bold')]},
-                    {'selector': 'tbody th', # Asegura que los nombres de las filas también sean negritas
+                    {'selector': 'tbody th', # Apunta a los encabezados de fila (Sucursales)
                      'props': [('color', 'black'), 
                                ('font-weight', 'bold')]}
                 ]
