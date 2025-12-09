@@ -14,6 +14,7 @@ VENTANA_MESES = 24
 MIN_CREDITOS_RANKING = 5 
 
 # --- 2. FUNCIÓN DE CARGA ---
+@st.cache_data
 def load_data():
     
     archivo = 'fpd gemini.xlsx'
@@ -422,6 +423,10 @@ with tab2:
                     FPD_Tasa=('is_fpd2', 'mean')
                 ).reset_index()
                 
+                # FORZAR A TIPO ENTERO antes de pivotar y aplicar estilo
+                pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int)
+                pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int)
+                
                 # 4. Pivotar la tabla (creando índice múltiple: Producto | Métrica)
                 table_pivot = pivot_data.pivot(
                     index='sucursal', 
@@ -437,19 +442,19 @@ with tab2:
                     (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
                 ]
 
-                # 5. Aplicar formato y estilo (SOLUCIÓN: ELIMINAR EL SEPARADOR DE MILES para evitar conflicto)
+                # 5. Aplicar formato y estilo (SOLUCIÓN: FORZAR INTEGER Y USAR FORMATO SIMPLE)
                 if rate_columns_safe:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
                         .format({
-                            # FORMATO CON CERO DECIMALES, SIN SEPARADOR DE MILES
+                            # FORMATO FINAL: Enteros sin decimales, sin separador de miles
                             idx[:, 'FPD_Casos']: "{:.0f}", 
                             idx[:, 'Total_Casos']: "{:.0f}", 
                             idx[:, 'FPD_Tasa']: "{:.2%}" # Porcentaje con 2 decimales
                         }) \
                         .set_properties(**{'font-size': '10pt'})
                 else:
-                    # Aplicar formato simple si no hay tasas disponibles para styling (ej. si solo hay NaNs)
+                    # Aplicar formato simple si no hay tasas disponibles para styling
                     styled_table = table_pivot.style \
                         .format({
                             idx[:, 'FPD_Casos']: "{:.0f}",
