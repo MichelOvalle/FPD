@@ -6,7 +6,7 @@ import os
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
-st.title("📊 Monitor FPD.")
+st.title("📊 Monitor FPD")
 
 # Configuraciones
 MESES_A_EXCLUIR = 2    
@@ -430,25 +430,21 @@ with tab2:
                 table_pivot.columns.names = ['Producto', 'Métrica']
                 
                 # 5. Aplicar formato y estilo
-                # CRÍTICO: Inicializar pd.IndexSlice
                 idx = pd.IndexSlice
-                
-                # Obtener todos los nombres de los productos que existen en el MultiIndex
                 existing_products = table_pivot.columns.get_level_values('Producto').unique()
                 
-                # Crear un selector seguro de las columnas de Tasa FPD
                 rate_columns_safe = [
                     (p, 'FPD_Tasa') for p in existing_products if ('FPD_Tasa' in table_pivot[p].columns)
                 ]
 
-                # 5. Aplicar formato y estilo (Solo si hay tasas disponibles para styling)
+                # 5. Aplicar formato y estilo (SOLUCIÓN: ELIMINAR EL SEPARADOR DE MILES para evitar conflicto)
                 if rate_columns_safe:
                     styled_table = table_pivot.style \
                         .background_gradient(cmap='RdYlGn_r', axis=None, subset=rate_columns_safe) \
                         .format({
-                            # FORMATO FINAL SOLICITADO
-                            idx[:, 'FPD_Casos']: "{:,.0f}",  # Enteros con separador
-                            idx[:, 'Total_Casos']: "{:,.0f}", # Enteros con separador
+                            # FORMATO CON CERO DECIMALES, SIN SEPARADOR DE MILES
+                            idx[:, 'FPD_Casos']: "{:.0f}", 
+                            idx[:, 'Total_Casos']: "{:.0f}", 
                             idx[:, 'FPD_Tasa']: "{:.2%}" # Porcentaje con 2 decimales
                         }) \
                         .set_properties(**{'font-size': '10pt'})
@@ -456,8 +452,8 @@ with tab2:
                     # Aplicar formato simple si no hay tasas disponibles para styling (ej. si solo hay NaNs)
                     styled_table = table_pivot.style \
                         .format({
-                            idx[:, 'FPD_Casos']: "{:,.0f}",
-                            idx[:, 'Total_Casos']: "{:,.0f}",
+                            idx[:, 'FPD_Casos']: "{:.0f}",
+                            idx[:, 'Total_Casos']: "{:.0f}",
                             idx[:, 'FPD_Tasa']: "{:.2%}"
                         })
                 
