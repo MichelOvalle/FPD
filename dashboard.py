@@ -687,7 +687,7 @@ with tab4:
                     names='Estado',
                     hole=0.4,
                     color='Estado',
-                    color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': '#2ca02c'}
+                    color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': "#441d9e"}
                 )
                 # Ajustamos la leyenda para que no ocupe mucho espacio en la columna pequeña
                 fig_pie.update_layout(showlegend=False) 
