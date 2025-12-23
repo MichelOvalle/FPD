@@ -339,7 +339,7 @@ with tab2:
         st.divider()
 
         # --- BLOQUE 2: PRODUCTOS (GLOBAL) ---
-        st.markdown(f"#### 📦 Análisis de Productos ({mes_actual})")
+        st.markdown(f"#### 📦 Análisis de Productos ({mes_anterior})")
         
         resumen_prod = df_resumen.groupby('producto').agg(
             tasa=('is_fpd2', 'mean'),
