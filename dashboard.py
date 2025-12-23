@@ -309,8 +309,8 @@ with tab2:
         # mes_actual y mes_anterior están definidos al inicio
         
         # --- BLOQUE 1: UNIDAD REGIONAL (GLOBAL) ---
-        st.markdown(f"#### 🌍 Análisis Regional ({mes_actual-1})")
-        df_resumen = df[df['cosecha_x'] == mes_actual-1]
+        st.markdown(f"#### 🌍 Análisis Regional ({mes_anterior})")
+        df_resumen = df[df['cosecha_x'] == mes_anterior]
         df_resumen_clean = df_resumen[~df_resumen['unidad'].astype(str).str.lower().str.contains("pr nominas", case=False)]
         resumen_unidad = df_resumen_clean.groupby('unidad')['is_fpd2'].mean().reset_index()
         
