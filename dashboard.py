@@ -667,6 +667,33 @@ with tab4:
         with col_exp1:
             st.metric("Cosecha a Exportar", cosecha_objetivo)
             st.metric("Casos FPD2 detectados", len(df_final_export))
+            
+            st.divider() # Una línea sutil para separar métricas de la gráfica
+            
+            # --- GRÁFICA DE PASTEL (Ubicada abajo de los casos detectados) ---
+            df_pie_data = df[df['cosecha_x'] == cosecha_objetivo].copy()
+            if not df_pie_data.empty:
+                total_fpd = int(df_pie_data['is_fpd2'].sum())
+                total_sin_fpd = len(df_pie_data) - total_fpd
+                
+                df_resumen_pie = pd.DataFrame({
+                    "Estado": ["Con FPD2", "Sin FPD2"],
+                    "Cantidad": [total_fpd, total_sin_fpd]
+                })
+                
+                fig_pie = px.pie(
+                    df_resumen_pie, 
+                    values='Cantidad', 
+                    names='Estado',
+                    hole=0.4,
+                    color='Estado',
+                    color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': '#2ca02c'}
+                )
+                # Ajustamos la leyenda para que no ocupe mucho espacio en la columna pequeña
+                fig_pie.update_layout(showlegend=False) 
+                fig_pie.update_traces(textinfo='percent+label')
+                
+                st.plotly_chart(fig_pie, use_container_width=True)               
 
         with col_exp2:
             if not df_final_export.empty:
@@ -693,32 +720,4 @@ with tab4:
 cosecha_target = todas[-2]
 df_pie_data = df[df['cosecha_x'] == cosecha_target].copy()
 
-if not df_pie_data.empty:
-    # 2. Calcular los conteos: Casos con FPD2 vs Casos Sin FPD2
-    total_fpd = int(df_pie_data['is_fpd2'].sum())
-    total_sin_fpd = len(df_pie_data) - total_fpd
-    
-    # 3. Crear el DataFrame para la gráfica
-    df_resumen_pie = pd.DataFrame({
-        "Estado": ["Con FPD2", "Sin FPD2"],
-        "Cantidad": [total_fpd, total_sin_fpd]
-    })
-    
-    # 4. Generar la gráfica con Plotly Express
-    fig_pie = px.pie(
-        df_resumen_pie, 
-        values='Cantidad', 
-        names='Estado',
-        title=f"Composición de Cartera - Cosecha {cosecha_target}",
-        color='Estado',
-        color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': '#2ca02c'}, # Rojo para riesgo, Verde para salud
-        hole=0.4 # Esto la convierte en una gráfica de dona, se ve más moderna
-    )
-    
-    # Configurar etiquetas para mostrar el valor absoluto y el porcentaje
-    fig_pie.update_traces(textinfo='percent+value')
 
-    # 5. Mostrar en Streamlit
-    st.plotly_chart(fig_pie, use_container_width=True)
-else:
-    st.warning(f"No hay datos disponibles para la cosecha {cosecha_target}")
