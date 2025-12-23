@@ -139,6 +139,7 @@ if df_base.empty:
     st.sidebar.warning("⚠️ Los filtros seleccionados no devolvieron datos para el Monitor.")
 
 df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
+df_top_x = df_base[df_base['cosecha_x'].isin(sel_cosecha_x)]
 
 # =========================================================
 # --- CÁLCULO CENTRALIZADO DEL BOTTOM 10 DE SUCURSALES ---
@@ -185,8 +186,8 @@ with tab1:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("1. Tendencia Global")
-            if not df_top.empty:
-                d = df_top.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
+            if not df_top_x.empty:
+                d = df_top_x.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
                 d['FPD2 %'] = d['is_fpd2']*100
                 fig = px.line(d, x='cosecha_x', y='FPD2 %', markers=True, text=d['FPD2 %'].apply(lambda x: f'{x:.1f}%'))
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
@@ -195,7 +196,7 @@ with tab1:
         with col2:
             st.subheader("2. Físico vs Digital")
             mask = df_top['origen'].str.contains('Fisico|Digital', case=False, na=False)
-            d_comp = df_top[mask].copy()
+            d_comp = df_top_x[mask].copy()
             if not d_comp.empty:
                 d = d_comp.groupby(['cosecha_x', 'origen'])['is_fpd2'].mean().reset_index()
                 d['FPD2 %'] = d['is_fpd2']*100
