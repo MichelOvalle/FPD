@@ -3,12 +3,13 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+import io
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
 st.title("📊 Monitor FPD")
 
-# Configuraciones
+# Configuraciones constantes
 MESES_A_EXCLUIR = 2    
 VENTANA_MESES = 24     
 MIN_CREDITOS_RANKING = 5 
@@ -16,12 +17,11 @@ MIN_CREDITOS_RANKING = 5
 # --- 2. FUNCIÓN DE CARGA ---
 @st.cache_data 
 def load_data():
-    
     archivo = 'fpd gemini.xlsx'
     if not os.path.exists(archivo):
         archivo = 'fpd gemini.csv'
         if not os.path.exists(archivo):
-             st.error("⚠️ No se encontró 'fpd gemini.xlsx' ni 'fpd gemini.csv'. Asegúrate de que el archivo de datos esté en la misma carpeta que el script.")
+             st.error("⚠️ No se encontró 'fpd gemini.xlsx' ni 'fpd gemini.csv'.")
              st.stop()
     
     try:
@@ -36,6 +36,7 @@ def load_data():
     df.columns = [str(c).lower().strip() for c in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
+    # Buscador inteligente de columnas
     col_cosecha = next((c for c in df.columns if 'cosecha' in c), None)
     col_fpd2 = next((c for c in df.columns if 'fpd2' in c), None)
     if not col_fpd2: col_fpd2 = next((c for c in df.columns if 'fpd' in c), None)
@@ -92,541 +93,136 @@ def load_data():
     df_clean['tipo_cliente'] = df_clean[c_tip].fillna('Sin Dato').astype(str) if c_tip else 'Sin Dato'
     
     df_clean['cosecha_x'] = df_clean['cosecha_str']
-    
     return df_clean
 
 # Cargar DATOS
 df = load_data()
 
-# --- 3. CONFIGURACIÓN DE VENTANA DE TIEMPO (AHORA FIJA) ---
+# --- 3. CONFIGURACIÓN DE VENTANA DE TIEMPO ---
 todas = sorted(df['cosecha_x'].unique())
 maduras = todas[:-MESES_A_EXCLUIR] if len(todas) > MESES_A_EXCLUIR else todas
 visualizar = maduras[-VENTANA_MESES:] if len(maduras) > VENTANA_MESES else maduras
 
 sel_cosecha = visualizar
-
-# Definición de la última cosecha madura
 mes_actual = maduras[-1] if len(maduras) >= 1 else None
 mes_anterior = maduras[-2] if len(maduras) >= 2 else None
 
-# --- 4. FILTROS DE NEGOCIO EN BARRA LATERAL ---
+# --- 4. FILTROS DE BARRA LATERAL ---
 st.sidebar.header("🎯 Filtros Generales")
-st.sidebar.info("La ventana de análisis temporal (24 meses) es fija. Los filtros de negocio aplican solo a la Pestaña 1.")
-
 st.sidebar.divider()
-st.sidebar.markdown("**Filtros de Negocio**")
 sel_uni = st.sidebar.multiselect("1. Unidad Regional:", sorted(df['unidad'].unique()))
 sel_suc = st.sidebar.multiselect("2. Sucursal:", sorted(df['sucursal'].unique()))
 sel_pro = st.sidebar.multiselect("3. Producto Agrupado:", sorted(df['producto'].unique()))
 sel_tip = st.sidebar.multiselect("4. Tipo de Cliente:", sorted(df['tipo_cliente'].unique()))
 
-# --- 5. PREPARACIÓN BASE FILTRADA (PESTAÑA 1) ---
+# --- 5. PREPARACIÓN BASE FILTRADA ---
 df_base = df.copy()
-
 if sel_uni: df_base = df_base[df_base['unidad'].isin(sel_uni)]
 if sel_suc: df_base = df_base[df_base['sucursal'].isin(sel_suc)]
 if sel_pro: df_base = df_base[df_base['producto'].isin(sel_pro)]
 if sel_tip: df_base = df_base[df_base['tipo_cliente'].isin(sel_tip)]
 
-if df_base.empty:
-    st.sidebar.warning("⚠️ Los filtros seleccionados no devolvieron datos para el Monitor.")
-
 df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
 
-# =========================================================
-# --- CÁLCULO CENTRALIZADO DEL BOTTOM 10 DE SUCURSALES ---
-# =========================================================
-
+# --- CÁLCULO DEL BOTTOM 10 ---
 worst_10_sucursales = []
 df_ranking_calc = pd.DataFrame()
 
-# *** CAMBIO: Usar solo la última cosecha madura para el ranking de la Pestaña 1 ***
 if mes_actual and not df_base.empty:
     df_ranking_base = df_base[df_base['cosecha_x'] == mes_actual].copy()
-else:
-    df_ranking_base = pd.DataFrame()
+    if not df_ranking_base.empty:
+        mask_999 = df_ranking_base['sucursal'].astype(str).str.contains("999", na=False)
+        mask_nomina = df_ranking_base['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
+        df_ranking_calc = df_ranking_base[~(mask_999 | mask_nomina)]
+        r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'sum', 'mean']).reset_index()
+        r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
+        if not r_clean_calc.empty:
+            bottom_10_df = r_clean_calc.sort_values('mean', ascending=False).head(10)
+            worst_10_sucursales = bottom_10_df['sucursal'].tolist()
 
-if not df_ranking_base.empty:
-    # 1. Base para el Ranking (Excluir '999' y 'nomina')
-    mask_999 = df_ranking_base['sucursal'].astype(str).str.contains("999", na=False)
-    mask_nomina = df_ranking_base['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
-    df_ranking_calc = df_ranking_base[~(mask_999 | mask_nomina)]
-    
-    # 2. Agregar 'sum' para contar los casos FPD
-    r_calc = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'sum', 'mean']).reset_index()
-    
-    r_clean_calc = r_calc[r_calc['count'] >= MIN_CREDITOS_RANKING]
+# --- 6. PESTAÑAS ---
+tab1, tab2, tab3, tab4 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos", "📥 Exportar"])
 
-    # 3. Obtener el Bottom 10 (peores tasas)
-    if not r_clean_calc.empty:
-        bottom_10_df = r_clean_calc.sort_values('mean', ascending=False).head(10)
-        worst_10_sucursales = bottom_10_df['sucursal'].tolist()
-
-
-# =========================================================
-# --- PESTAÑAS ---
-# =========================================================
-tab1, tab2, tab3 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos"])
-
-# --- PESTAÑA 1: MONITOR FPD ---
+# --- PESTAÑA 1: MONITOR ---
 with tab1:
     if df_base.empty:
         st.warning("No hay datos para mostrar con los filtros actuales.")
     else:
         st.markdown("### Resumen Operativo")
-        
-        col1, col2 = st.columns(2)
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             st.subheader("1. Tendencia Global")
-            if not df_top.empty:
-                d = df_top.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
-                d['FPD2 %'] = d['is_fpd2']*100
-                fig = px.line(d, x='cosecha_x', y='FPD2 %', markers=True, text=d['FPD2 %'].apply(lambda x: f'{x:.1f}%'))
-                fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
-                fig.update_layout(xaxis_type='category')
-                st.plotly_chart(fig, use_container_width=True)
-        with col2:
+            d = df_top.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
+            d['FPD2 %'] = d['is_fpd2']*100
+            fig = px.line(d, x='cosecha_x', y='FPD2 %', markers=True, text=d['FPD2 %'].apply(lambda x: f'{x:.1f}%'))
+            fig.update_traces(line_color='#FF4B4B', textposition="top center")
+            st.plotly_chart(fig, use_container_width=True)
+        with c2:
             st.subheader("2. Físico vs Digital")
             mask = df_top['origen'].str.contains('Fisico|Digital', case=False, na=False)
             d_comp = df_top[mask].copy()
             if not d_comp.empty:
                 d = d_comp.groupby(['cosecha_x', 'origen'])['is_fpd2'].mean().reset_index()
                 d['FPD2 %'] = d['is_fpd2']*100
-                fig = px.line(d, x='cosecha_x', y='FPD2 %', color='origen', markers=True, color_discrete_map={'Fisico': '#1f77b4', 'Digital': '#2ca02c'})
-                fig.update_layout(xaxis_type='category', legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"))
+                fig = px.line(d, x='cosecha_x', y='FPD2 %', color='origen', markers=True)
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Sin datos de Origen.")
 
         st.divider()
-        
-        st.subheader(f"3. Ranking de Sucursales (Cosecha {mes_actual})") # Actualiza el título
-        
+        st.subheader(f"3. Ranking de Sucursales (Cosecha {mes_actual})")
         if not df_ranking_calc.empty and not r_clean_calc.empty:
-            c1, c2 = st.columns(2)
-            
-            # Crear la columna FPD2 % como valor * 100 para el formato de número
-            r_clean_calc['FPD2_Pct_Display'] = r_clean_calc['mean'] * 100
-
-            # Definición de columnas para el ranking
-            # *** Se muestran solo 'sucursal' y 'FPD2 %' ***
-            ranking_columns = ['sucursal', 'FPD2_Pct_Display']
-            # *** Se renombra FPD2_Pct_Display a FPD2 % ***
-            ranking_rename = {'FPD2_Pct_Display': 'FPD2 %'}
-
-            # *** CORRECCIÓN CRÍTICA: La clave debe ser el nombre renombrado ('FPD2 %') ***
-            column_config = {
-                "FPD2 %": st.column_config.NumberColumn(
-                    "FPD2 %", 
-                    format="%.2f%%", # Muestra con 2 decimales y el %
-                )
-            }
-
-            c1.dataframe(
-                r_clean_calc.sort_values('mean', ascending=False).head(10)[ranking_columns].rename(columns=ranking_rename), 
-                hide_index=True, 
-                use_container_width=True, 
-                column_config=column_config
-            )
-            c2.dataframe(
-                r_clean_calc.sort_values('mean', ascending=True).head(10)[ranking_columns].rename(columns=ranking_rename), 
-                hide_index=True, 
-                use_container_width=True, 
-                column_config=column_config
-            )
-        else:
-             st.warning(f"No hay suficientes datos para la cosecha {mes_actual} para calcular el ranking.")
-
-
-        st.divider()
-        
-        st.subheader("4. Análisis Detallado")
-        cy1, cy2 = st.columns(2)
-
-        with cy1:
-            st.markdown("##### Comparativo Anual (Mes a Mes)")
-            todas_neg = sorted(df_base['cosecha_x'].unique())
-            cosechas_maduras_globales = todas_neg[:-MESES_A_EXCLUIR] if len(todas_neg) > MESES_A_EXCLUIR else todas_neg
-            
-            df_yoy = df_base[
-                (df_base['cosecha_x'].isin(cosechas_maduras_globales)) & 
-                (df_base['anio'].isin(['2023', '2024', '2025']))
-            ].copy()
-            
-            if not df_yoy.empty:
-                dy = df_yoy.groupby(['mes_num', 'mes_nombre', 'anio'])['is_fpd2'].mean().reset_index()
-                dy['FPD2 %'] = dy['is_fpd2'] * 100
-                dy = dy.sort_values('mes_num')
-                dy['etiqueta'] = dy.apply(lambda r: f"{r['FPD2 %']:.1f}%" if r['anio'] == '2025' else None, axis=1)
-                
-                fig_yoy = px.line(dy, x='mes_nombre', y='FPD2 %', color='anio', markers=True, text='etiqueta',
-                    color_discrete_map={'2023': '#999999', '2024': '#1f77b4', '2025': '#d62728'})
-                fig_yoy.update_traces(textposition="top center")
-                fig_yoy.update_layout(xaxis_title="Mes", yaxis_title="% FPD", hovermode="x unified", legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center", title=None), margin=dict(b=50))
-                st.plotly_chart(fig_yoy, use_container_width=True)
-            else:
-                st.info("No hay datos históricos.")
-
-        with cy2:
-            st.markdown(f"##### Histórico Indicadores ({visualizar[0]} - {visualizar[-1]})")
-            df_ind = df_base[df_base['cosecha_x'].isin(visualizar)].copy()
-            if not df_ind.empty:
-                dh = df_ind.groupby('cosecha_x')[['is_fpd2', 'is_np']].mean().reset_index()
-                dh['% FPD'] = dh['is_fpd2'] * 100
-                dh['% NP'] = dh['is_np'] * 100
-                dh_melt = dh.melt(id_vars=['cosecha_x'], value_vars=['% FPD', '% NP'], var_name='Indicador', value_name='Porcentaje')
-                dh_melt['etiqueta'] = dh_melt['Porcentaje'].map('{:.1f}%'.format)
-                fig_ind = px.line(dh_melt, x='cosecha_x', y='Porcentaje', color='Indicador', markers=True, text='etiqueta', color_discrete_map={'% FPD': '#d62728', '% NP': '#ff7f0e'})
-                fig_ind.update_traces(textposition="top center")
-                fig_ind.update_layout(xaxis_title="Cosecha", yaxis_title="%", xaxis_type='category', hovermode="x unified", legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center", title=None), margin=dict(b=50))
-                st.plotly_chart(fig_ind, use_container_width=True)
-            else:
-                st.info("No hay datos en la ventana seleccionada.")
-
-        st.divider()
-        st.subheader("5. Evolución por Tipo de Cliente")
-        df_tipo = df_base[df_base['cosecha_x'].isin(visualizar)].copy()
-        df_tipo = df_tipo[~df_tipo['tipo_cliente'].astype(str).str.lower().str.contains('former')]
-        
-        if not df_tipo.empty:
-            dt = df_tipo.groupby(['cosecha_x', 'tipo_cliente'])['is_fpd2'].mean().reset_index()
-            dt['FPD2 %'] = dt['is_fpd2'] * 100
-            dt['etiqueta'] = dt['FPD2 %'].map('{:.1f}%'.format)
-            fig_tipo = px.line(dt, x='cosecha_x', y='FPD2 %', color='tipo_cliente', markers=True, text='etiqueta', title=f"Comportamiento FPD por Tipo Cliente ({visualizar[0]} - {visualizar[-1]})")
-            fig_tipo.update_traces(textposition="top center")
-            fig_tipo.update_layout(xaxis_title="Cosecha", yaxis_title="% FPD", xaxis_type='category', hovermode="x unified", legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center", title=None))
-            st.plotly_chart(fig_tipo, use_container_width=True)
-        else:
-            st.info("No hay datos para la gráfica de Tipo de Cliente.")
+            rx1, rx2 = st.columns(2)
+            r_clean_calc['FPD2 %'] = r_clean_calc['mean'] * 100
+            column_config = {"FPD2 %": st.column_config.NumberColumn(format="%.2f%%")}
+            rx1.dataframe(r_clean_calc.sort_values('mean', ascending=False).head(10)[['sucursal', 'FPD2 %']], hide_index=True, use_container_width=True, column_config=column_config)
+            rx2.dataframe(r_clean_calc.sort_values('mean', ascending=True).head(10)[['sucursal', 'FPD2 %']], hide_index=True, use_container_width=True, column_config=column_config)
 
 # --- PESTAÑA 2: RESUMEN EJECUTIVO (GLOBAL) ---
 with tab2:
-    st.header("📋 Resumen Ejecutivo Global (Sin Filtros)")
-    
-    if len(maduras) < 2:
-        st.error("No hay suficientes cosechas maduras.")
+    st.header("📋 Resumen Ejecutivo Global")
+    if len(maduras) < 2: st.error("Insuficiente historia.")
     else:
-        # mes_actual y mes_anterior están definidos al inicio
-        
-        # --- BLOQUE 1: UNIDAD REGIONAL (GLOBAL) ---
         st.markdown(f"#### 🌍 Análisis Regional ({mes_actual})")
         df_resumen = df[df['cosecha_x'] == mes_actual]
-        df_resumen_clean = df_resumen[~df_resumen['unidad'].astype(str).str.lower().str.contains("pr nominas", case=False)]
-        resumen_unidad = df_resumen_clean.groupby('unidad')['is_fpd2'].mean().reset_index()
-        
-        if not resumen_unidad.empty:
-            mejor = resumen_unidad.loc[resumen_unidad['is_fpd2'].idxmin()]
-            peor = resumen_unidad.loc[resumen_unidad['is_fpd2'].idxmax()]
-            
-            col_r1, col_r2 = st.columns(2)
-            with col_r1:
-                st.markdown(f"""
-                <div style='background-color: #e8f5e9; padding: 20px; border-radius: 12px; border: 1px solid #c8e6c9;'>
-                    <h3 style='color: #2e7d32; margin:0;'>🟢 Mejor Región</h3>
-                    <h4 style='margin:5px 0;'>{mejor['unidad']}</h4>
-                    <h2 style='color: #2e7d32; font-size: 2.5em; margin: 0;'>{mejor['is_fpd2']*100:.2f}%</h2>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_r2:
-                st.markdown(f"""
-                <div style='background-color: #ffebee; padding: 20px; border-radius: 12px; border: 1px solid #ffcdd2;'>
-                    <h3 style='color: #c62828; margin:0;'>🔴 Mayor Riesgo</h3>
-                    <h4 style='margin:5px 0;'>{peor['unidad']}</h4>
-                    <h2 style='color: #c62828; font-size: 2.5em; margin: 0;'>{peor['is_fpd2']*100:.2f}%</h2>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        st.divider()
+        res_uni = df_resumen[~df_resumen['unidad'].str.lower().str.contains("nomina")].groupby('unidad')['is_fpd2'].mean().reset_index()
+        if not res_uni.empty:
+            mejor, peor = res_uni.loc[res_uni['is_fpd2'].idxmin()], res_uni.loc[res_uni['is_fpd2'].idxmax()]
+            cr1, cr2 = st.columns(2)
+            cr1.success(f"**Mejor Región:** {mejor['unidad']} ({mejor['is_fpd2']*100:.2f}%)")
+            cr2.error(f"**Mayor Riesgo:** {peor['unidad']} ({peor['is_fpd2']*100:.2f}%)")
 
-        # --- BLOQUE 2: PRODUCTOS (GLOBAL) ---
-        st.markdown(f"#### 📦 Análisis de Productos ({mes_actual})")
-        
-        resumen_prod = df_resumen.groupby('producto').agg(
-            tasa=('is_fpd2', 'mean'),
-            conteo_total=('is_fpd2', 'count'),
-            conteo_fpd=('is_fpd2', 'sum')
-        ).reset_index()
-        
-        resumen_prod = resumen_prod[resumen_prod['conteo_total'] >= MIN_CREDITOS_RANKING]
-        promedio_global = df_resumen['is_fpd2'].mean()
-        
-        if not resumen_prod.empty:
-            prod_mejor = resumen_prod.sort_values(by=['tasa', 'conteo_total'], ascending=[True, False]).iloc[0]
-            prod_peor = resumen_prod.sort_values(by=['tasa', 'conteo_total'], ascending=[False, False]).iloc[0]
-            
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                st.markdown(f"""
-                <div style='background-color: #e3f2fd; padding: 20px; border-radius: 12px; border: 1px solid #bbdefb;'>
-                    <h3 style='color: #1565c0; margin:0;'>🏆 Mejor Producto</h3>
-                    <h4 style='margin:5px 0;'>{prod_mejor['producto']}</h4>
-                    <h2 style='color: #1565c0; font-size: 2.5em; margin: 0;'>{prod_mejor['tasa']*100:.2f}%</h2>
-                    <p style='color: #555; margin-top: 10px;'>
-                        <b>{int(prod_mejor['conteo_fpd'])}</b> créditos en FPD<br>
-                        de <b>{int(prod_mejor['conteo_total'])}</b> colocados.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_p2:
-                st.markdown(f"""
-                <div style='background-color: #fff3e0; padding: 20px; border-radius: 12px; border: 1px solid #ffe0b2;'>
-                    <h3 style='color: #e65100; margin:0;'>⚠️ Mayor Riesgo FPD</h3>
-                    <h4 style='margin:5px 0;'>{prod_peor['producto']}</h4>
-                    <h2 style='color: #e65100; font-size: 2.5em; margin: 0;'>{prod_peor['tasa']*100:.2f}%</h2>
-                    <p style='color: #555; margin-top: 10px;'>
-                        <b>{int(prod_peor['conteo_fpd'])}</b> créditos en FPD<br>
-                        de <b>{int(prod_peor['conteo_total'])}</b> colocados.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with st.expander("Ver tabla completa de productos (Coloreada)"):
-                df_view = resumen_prod.copy()
-                df_view = df_view.rename(columns={'producto': 'Producto', 'conteo_total': 'Total Créditos', 'conteo_fpd': 'Créditos FPD', 'tasa': 'Tasa %'})
-                df_view = df_view.sort_values('Tasa %', ascending=False)
-                
-                def estilo_tasas(val):
-                    color = '#d32f2f' if val > promedio_global else '#2e7d32'
-                    weight = 'bold'
-                    return f'color: {color}; font-weight: {weight}'
-
-                st.dataframe(
-                    df_view.style
-                    .applymap(estilo_tasas, subset=['Tasa %'])
-                    .format({'Tasa %': '{:.2%}'})
-                    .applymap(lambda x: 'font-weight: bold', subset=['Producto']),
-                    use_container_width=True,
-                    hide_index=True
-                )
-        else:
-            st.warning("No hay productos con suficientes créditos para evaluar.")
-
-        st.divider()
-
-        # --- BLOQUE 3: COMPARATIVA SUCURSALES (GLOBAL) ---
-        st.markdown(f"#### 🏦 Comparativa de Sucursales ({mes_anterior} vs {mes_actual})")
-        
-        df_comp = df[df['cosecha_x'].isin([mes_anterior, mes_actual])].copy()
-        mask_999 = df_comp['sucursal'].astype(str).str.contains("999", na=False)
-        mask_nom = df_comp['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
-        df_comp = df_comp[~(mask_999 | mask_nom)]
-        
-        pivot = df_comp.groupby(['sucursal', 'cosecha_x']).agg(tasa=('is_fpd2', 'mean'), conteo=('is_fpd2', 'count')).reset_index()
-        
-        pivot_tasa = pivot.pivot(index='sucursal', columns='cosecha_x', values='tasa')
-        pivot_count = pivot.pivot(index='sucursal', columns='cosecha_x', values='conteo')
-        
-        if mes_actual in pivot_tasa.columns and mes_anterior in pivot_tasa.columns:
-            validas = pivot_count[(pivot_count[mes_actual] >= MIN_CREDITOS_RANKING) & (pivot_count[mes_anterior] > 0)].index
-            df_final_comp = pivot_tasa.loc[validas]
-            
-            if not df_final_comp.empty:
-                suc_mejor = df_final_comp[mes_actual].idxmin()
-                val_mejor_act = df_final_comp.loc[suc_mejor, mes_actual] * 100
-                val_mejor_ant = df_final_comp.loc[suc_mejor, mes_anterior] * 100
-                
-                suc_peor = df_final_comp[mes_actual].idxmax()
-                val_peor_act = df_final_comp.loc[suc_peor, mes_actual] * 100
-                val_peor_ant = df_final_comp.loc[suc_peor, mes_anterior] * 100
-                
-                st.markdown(f"""
-                <div style='background-color: #fff8e1; padding: 15px; border-radius: 10px; border-left: 5px solid #ffb300;'>
-                    <p>🏆 <b>Mejor Comportamiento:</b> <b>{suc_mejor}</b><br>
-                    Pasó de {val_mejor_ant:.1f}% ➡️ <b>{val_mejor_act:.1f}%</b>.</p>
-                </div>
-                <div style='background-color: #ffebee; padding: 15px; border-radius: 10px; border-left: 5px solid #d32f2f; margin-top: 10px;'>
-                    <p>📉 <b>Mayor Deterioro:</b> <b>{suc_peor}</b><br>
-                    Pasó de {val_peor_ant:.1f}% ➡️ <b>{val_peor_act:.1f}%</b>.</p>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.info("Sin datos suficientes para comparar.")
-
-        st.divider()
-        
-        # --- BLOQUE 4: DETALLE PRODUCTO POR SUCURSAL (BOTTOM 10) ---
-        st.markdown("#### 4. Detalle de Riesgo por Producto y Sucursal (Bottom 10)")
-        st.markdown("⚠️ **Nota:** Esta tabla muestra **(Casos FPD | Total Casos | % FPD)** para las **10 sucursales con mayor riesgo**, según los filtros de negocio aplicados.")
-
-        if worst_10_sucursales:
-            # 1. Usar df_base (filtrado por sidebar) y el mes actual
-            df_detalle = df_base[df_base['cosecha_x'] == mes_actual].copy()
-            
-            # 2. FILTRAR POR EL BOTTOM 10 CALCULADO
-            df_detalle = df_detalle[df_detalle['sucursal'].isin(worst_10_sucursales)]
-            
-            df_detalle = df_detalle[~df_detalle['sucursal'].astype(str).str.contains("999", na=False)]
-            
-            if not df_detalle.empty:
-                # 3. Calcular FPD % / Casos / Total por Sucursal y Producto
-                pivot_data = df_detalle.groupby(['sucursal', 'producto']).agg(
-                    FPD_Casos=('is_fpd2', 'sum'),
-                    Total_Casos=('is_fpd2', 'count'),
-                    FPD_Tasa=('is_fpd2', 'mean') 
-                ).reset_index()
-                
-                # Convertir Casos a string (entero)
-                pivot_data['FPD_Casos'] = pivot_data['FPD_Casos'].fillna(0).astype(int).astype(str)
-                pivot_data['Total_Casos'] = pivot_data['Total_Casos'].fillna(0).astype(int).astype(str)
-                
-                # Crear columna de tasa FPD como STRING con formato de porcentaje
-                pivot_data['FPD_Tasa'] = (pivot_data['FPD_Tasa'] * 100).map('{:.2f}%'.format).astype(str)
-
-                # 4. Pivotar la tabla
-                # *** CORRECCIÓN V56: NO USAR swaplevel. Esto asegura el orden (Métrica, Producto) ***
-                table_pivot = pivot_data.pivot(
-                    index='sucursal', 
-                    columns='producto',
-                    values=['FPD_Casos', 'Total_Casos', 'FPD_Tasa'] # Este orden define la Métrica
-                )
-                
-                # Establecer los nombres de los niveles
-                # (Level 0: Métrica, Level 1: Producto)
-                table_pivot.columns.names = ['Métrica', 'Producto']
-
-                # 5. Aplicar estilo: TAMAÑO DE FUENTE Y ESTILOS SOLICITADOS (Fondo Celeste, Negritas)
-                
-                # Estilos CSS para aplicar a la tabla
-                styles = [
-                    # Estilo para los encabezados de columna (th)
-                    {'selector': 'th',
-                     'props': [('background-color', '#e0f7fa'), 
-                               ('color', 'black'), 
-                               ('font-weight', 'bold'),
-                               ('font-size', '10pt')]},
-                    
-                    # Estilo para los encabezados de índice (Sucursales) - letra negra y negritas
-                    {'selector': 'tbody th', # Asegura que los nombres de las filas también sean negritas
-                     'props': [('color', 'black'), 
-                               ('font-weight', 'bold')]}
-                ]
-                
-                styled_table = table_pivot.style \
-                    .set_table_styles(styles) \
-                    .set_properties(**{'font-size': '10pt'}) 
-                
-                st.dataframe(styled_table, use_container_width=True)
-            else:
-                st.warning(f"No hay datos para la cosecha {mes_actual} con el Bottom 10 de sucursales filtrado.")
-
-        else:
-            st.info("No hay suficientes datos para calcular el Bottom 10 de sucursales con los filtros de negocio aplicados.")
-
-# --- PESTAÑA 3: INSIGHTS ESTRATÉGICOS (GLOBAL) ---
+# --- PESTAÑA 3: INSIGHTS ---
 with tab3:
-    st.header("🎯 Insights Estratégicos & Análisis Profundo")
-    st.markdown("Esta sección utiliza la **base completa** (global) para detectar patrones de riesgo y oportunidades.")
-    
-    if len(maduras) < 6:
-        st.warning("Se necesitan al menos 6 meses de historia madura para generar el mapa de calor.")
-    else:
-        # 1. HEATMAP DE RIESGO REGIONAL (Últimos 6 meses)
-        st.subheader("1. Mapa de Calor de Riesgo Regional (Últimos 6 meses)")
-        ultimos_6 = maduras[-6:]
-        df_heat = df[df['cosecha_x'].isin(ultimos_6)].copy()
-        df_heat = df_heat[~df_heat['unidad'].astype(str).str.lower().str.contains("pr nominas", case=False)]
-        
-        pivot_heat = df_heat.groupby(['unidad', 'cosecha_x'])['is_fpd2'].mean().reset_index()
-        pivot_heat['FPD2 %'] = pivot_heat['is_fpd2'] * 100
-        
-        heatmap_data = pivot_heat.pivot(index='unidad', columns='cosecha_x', values='FPD2 %')
-        
-        fig_heat = px.imshow(
-            heatmap_data,
-            labels=dict(x="Cosecha", y="Unidad Regional", color="% FPD"),
-            x=heatmap_data.columns,
-            y=heatmap_data.index,
-            text_auto='.1f',
-            color_continuous_scale='RdYlGn_r',
-            aspect="auto"
-        )
-        fig_heat.update_xaxes(type='category') 
-        fig_heat.update_layout(title="Evolución del Riesgo por Región")
+    st.header("🎯 Insights Estratégicos")
+    if len(maduras) >= 6:
+        st.subheader("1. Mapa de Calor (Últimos 6 meses)")
+        df_heat = df[df['cosecha_x'].isin(maduras[-6:])].groupby(['unidad', 'cosecha_x'])['is_fpd2'].mean().reset_index()
+        df_heat['FPD2 %'] = df_heat['is_fpd2'] * 100
+        fig_heat = px.imshow(df_heat.pivot(index='unidad', columns='cosecha_x', values='FPD2 %'), text_auto='.1f', color_continuous_scale='RdYlGn_r')
         st.plotly_chart(fig_heat, use_container_width=True)
 
-    st.divider()
+# --- PESTAÑA 4: EXPORTAR ---
+with tab4:
+    st.header("📥 Centro de Descargas")
+    st.markdown("Genera reportes en formato CSV basados en los filtros actuales.")
 
-    # 2. PARETO DE SUCURSALES (80/20)
-    st.subheader("2. Ley de Pareto: ¿Quién genera el riesgo?")
-    st.markdown("Identificamos qué porcentaje de sucursales concentra el 80% de los casos de FPD en la **última cosecha madura**.")
-    
-    ultima = mes_actual # Ya está definido al inicio
-    df_pareto = df[df['cosecha_x'] == ultima].copy()
-    
-    mask_999 = df_pareto['sucursal'].astype(str).str.contains("999", na=False)
-    mask_nom = df_pareto['sucursal'].astype(str).str.lower().str.contains("nomina colaboradores", na=False)
-    df_pareto = df_pareto[~(mask_999 | mask_nom)]
-    
-    pareto = df_pareto.groupby('sucursal')['is_fpd2'].sum().reset_index()
-    pareto = pareto.sort_values('is_fpd2', ascending=False)
-    pareto = pareto[pareto['is_fpd2'] > 0]
-    
-    pareto['Acumulado'] = pareto['is_fpd2'].cumsum()
-    pareto['% Acumulado'] = pareto['is_fpd2'].cumsum() / pareto['is_fpd2'].sum() * 100
-    pareto['Rank'] = range(1, len(pareto) + 1)
-    
-    corte_80 = pareto[pareto['% Acumulado'] <= 80]
-    num_sucursales_80 = len(corte_80)
-    total_sucursales = len(pareto)
-    pct_sucursales = (num_sucursales_80 / total_sucursales * 100) if total_sucursales > 0 else 0
-    
-    col_p1, col_p2 = st.columns([1, 3])
-    with col_p1:
-        st.info(f"""
-        **El Principio 80/20 en acción:**
-        
-        El **{pct_sucursales:.1f}%** de las sucursales con FPD ({num_sucursales_80} de {total_sucursales}) generan el **80%** de todos los casos de impago.
-        """)
-        st.metric(label="Total Casos FPD", value=int(pareto['is_fpd2'].sum()))
-    
-    with col_p2:
-        fig_pareto = px.bar(pareto.head(30), x='sucursal', y='is_fpd2', title="Top 30 Sucursales con más casos (Volumen)", labels={'is_fpd2': 'Casos FPD'})
-        fig_pareto.update_traces(marker_color='#d62728')
-        st.plotly_chart(fig_pareto, use_container_width=True)
+    @st.cache_data
+    def convert_df(dataframe):
+        return dataframe.to_csv(index=False).encode('utf-8')
+
+    ce1, ce2 = st.columns(2)
+    with ce1:
+        st.subheader("1. Datos Filtrados")
+        st.write(f"Registros: `{len(df_base):,}`")
+        st.download_button("💾 Descargar Base Filtrada (CSV)", convert_df(df_base), f"base_fpd_{mes_actual}.csv", "text/csv", use_container_width=True)
+
+    with ce2:
+        st.subheader("2. Reporte de Sucursales")
+        if not df_ranking_calc.empty:
+            resumen_export = df_ranking_calc.groupby('sucursal')['is_fpd2'].agg(['count', 'sum', 'mean']).reset_index()
+            resumen_export.columns = ['Sucursal', 'Créditos Totales', 'Casos FPD', 'Tasa %']
+            resumen_export['Tasa %'] = (resumen_export['Tasa %'] * 100).round(2)
+            st.download_button("📊 Descargar KPIs Sucursales (CSV)", convert_df(resumen_export), f"kpi_sucursales_{mes_actual}.csv", "text/csv", use_container_width=True)
 
     st.divider()
-
-    # 3. ANÁLISIS DE SENSIBILIDAD POR MONTO
-    st.subheader("3. Sensibilidad al Riesgo por Monto Otorgado")
-    st.markdown(f"Análisis de la cosecha **{ultima}**. ¿Los créditos más grandes tienen peor comportamiento?")
-    
-    df_monto = df[df['cosecha_x'] == ultima].copy()
-    
-    bins = [0, 3000, 5000, 8000, 12000, 20000, 1000000]
-    labels = ['0-3k', '3k-5k', '5k-8k', '8k-12k', '12k-20k', '>20k']
-    
-    df_monto['rango_monto'] = pd.cut(df_monto['monto'], bins=bins, labels=labels)
-    
-    resumen_monto = df_monto.groupby('rango_monto')['is_fpd2'].agg(['mean', 'count']).reset_index()
-    resumen_monto['FPD2 %'] = resumen_monto['mean'] * 100
-    
-    fig_dual = go.Figure()
-    
-    fig_dual.add_trace(go.Bar(
-        x=resumen_monto['rango_monto'],
-        y=resumen_monto['count'],
-        name='Volumen Créditos',
-        marker_color='#bbdefb',
-        yaxis='y'
-    ))
-    
-    fig_dual.add_trace(go.Scatter(
-        x=resumen_monto['rango_monto'],
-        y=resumen_monto['FPD2 %'],
-        name='% FPD',
-        mode='lines+markers+text',
-        text=[f'{v:.1f}%' for v in resumen_monto['FPD2 %']],
-        textposition='top center',
-        line=dict(color='#d62728', width=3),
-        yaxis='y2'
-    ))
-    
-    fig_dual.update_layout(
-        title="Volumen vs Riesgo por Rango de Monto",
-        yaxis=dict(title='Cantidad de Créditos'),
-        yaxis2=dict(title='% FPD', overlaying='y', side='right'),
-        legend=dict(orientation="h", y=-0.1),
-        hovermode="x unified"
-    )
-    
-    st.plotly_chart(fig_dual, use_container_width=True)
+    st.markdown("### 👀 Vista Previa (Top 50)")
+    st.dataframe(df_base.head(50), use_container_width=True)
