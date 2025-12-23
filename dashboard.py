@@ -689,3 +689,36 @@ with tab4:
                 st.warning(f"No se encontraron casos de FPD2 para la cosecha {cosecha_objetivo}.")
     else:
         st.error("No hay datos disponibles para procesar la exportación.")
+        # 1. Filtrar los datos para la cosecha específica
+cosecha_target = todas[-2]
+df_pie_data = df[df['cosecha_x'] == cosecha_target].copy()
+
+if not df_pie_data.empty:
+    # 2. Calcular los conteos: Casos con FPD2 vs Casos Sin FPD2
+    total_fpd = int(df_pie_data['is_fpd2'].sum())
+    total_sin_fpd = len(df_pie_data) - total_fpd
+    
+    # 3. Crear el DataFrame para la gráfica
+    df_resumen_pie = pd.DataFrame({
+        "Estado": ["Con FPD2", "Sin FPD2"],
+        "Cantidad": [total_fpd, total_sin_fpd]
+    })
+    
+    # 4. Generar la gráfica con Plotly Express
+    fig_pie = px.pie(
+        df_resumen_pie, 
+        values='Cantidad', 
+        names='Estado',
+        title=f"Composición de Cartera - Cosecha {cosecha_target}",
+        color='Estado',
+        color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': '#2ca02c'}, # Rojo para riesgo, Verde para salud
+        hole=0.4 # Esto la convierte en una gráfica de dona, se ve más moderna
+    )
+    
+    # Configurar etiquetas para mostrar el valor absoluto y el porcentaje
+    fig_pie.update_traces(textinfo='percent+value')
+
+    # 5. Mostrar en Streamlit
+    st.plotly_chart(fig_pie, use_container_width=True)
+else:
+    st.warning(f"No hay datos disponibles para la cosecha {cosecha_target}")
