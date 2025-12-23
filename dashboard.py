@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-import io
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
@@ -33,19 +32,19 @@ def load_data():
         st.error(f"Error leyendo el archivo {archivo}: {e}")
         st.stop()
 
+    # Estandarizar nombres a minúsculas para facilitar el filtrado y selección
     df.columns = [str(c).lower().strip() for c in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
-    # Buscador inteligente de columnas
+    # Buscador inteligente de columnas para lógica interna
     col_cosecha = next((c for c in df.columns if 'cosecha' in c), None)
     col_fpd2 = next((c for c in df.columns if 'fpd2' in c), None)
     if not col_fpd2: col_fpd2 = next((c for c in df.columns if 'fpd' in c), None)
     col_np = next((c for c in df.columns if 'np' == c or 'np' in c.split('_')), None) 
     col_monto = next((c for c in df.columns if 'monto' in c and 'otorgado' in c), None)
-    if not col_monto: col_monto = next((c for c in df.columns if 'monto' in c), None)
 
     if not col_cosecha or not col_fpd2:
-        st.error(f"Faltan columnas clave.")
+        st.error("Faltan columnas clave (Cosecha o FPD).")
         st.stop()
 
     df_clean = df.copy()
@@ -63,63 +62,46 @@ def load_data():
     mapa_meses = {1:'Ene', 2:'Feb', 3:'Mar', 4:'Abr', 5:'May', 6:'Jun', 7:'Jul', 8:'Ago', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dic', 0:'SinDato'}
     df_clean['mes_nombre'] = df_clean['mes_num'].map(mapa_meses)
     
+    # Bandera binaria para lógica de cálculo
     df_clean['is_fpd2'] = df_clean[col_fpd2].astype(str).apply(lambda x: 1 if 'FPD' in x.upper() else 0)
-    df_clean['is_np'] = df_clean[col_np].astype(str).apply(lambda x: 1 if 'NP' in x.upper() else 0) if col_np else 0
-
+    
     if col_monto: df_clean['monto'] = pd.to_numeric(df_clean[col_monto], errors='coerce').fillna(0)
     else: df_clean['monto'] = 0
 
-    def find_best_column(dataframe, candidates_priority, fallback_search_term):
-        for cand in candidates_priority:
-            if cand in dataframe.columns: return cand
-        return None
+    # Mapeo de columnas para consistencia en filtros
+    def find_col(candidates, fallback):
+        for cand in candidates:
+            if cand in df_clean.columns: return cand
+        return fallback
 
-    c_suc = find_best_column(df_clean, ['sucursal', 'nombre_sucursal'], 'sucursal')
-    df_clean['sucursal'] = df_clean[c_suc].fillna('Sin Dato').astype(str) if c_suc else 'Sin Dato'
-
-    c_uni = find_best_column(df_clean, ['unidad_regional', 'regional', 'region', 'unidad'], 'regional')
-    df_clean['unidad'] = df_clean[c_uni].fillna('Sin Dato').astype(str) if c_uni else 'Sin Dato'
-
-    c_prod = find_best_column(df_clean, ['producto_agrupado', 'nombre_producto', 'producto'], 'producto')
-    df_clean['producto'] = df_clean[c_prod].fillna('Sin Dato').astype(str) if c_prod else 'Sin Dato'
-
-    c_ori = find_best_column(df_clean, ['origen2', 'origen'], 'origen')
-    df_clean['origen'] = df_clean[c_ori].fillna('Sin Dato').astype(str).str.title() if c_ori else 'Sin Dato'
-
-    c_tip = find_best_column(df_clean, ['tipo_cliente', 'tipo'], 'cliente')
-    df_clean['tipo_cliente'] = df_clean[c_tip].fillna('Sin Dato').astype(str) if c_tip else 'Sin Dato'
-    
+    df_clean['sucursal'] = df_clean[find_col(['sucursal', 'nombre_sucursal'], col_cosecha)].astype(str) # Fallback seguro
+    df_clean['unidad'] = df_clean[find_col(['unidad_regional', 'regional', 'region', 'unidad'], col_cosecha)].astype(str)
+    df_clean['producto'] = df_clean[find_col(['producto_agrupado', 'nombre_producto', 'producto'], col_cosecha)].astype(str)
     df_clean['cosecha_x'] = df_clean['cosecha_str']
+    
     return df_clean
 
 # Cargar DATOS
 df = load_data()
 
-# --- 3. LÓGICA DE COSECHAS (MADURAS Y SIGUIENTE) ---
+# --- 3. LÓGICA DE TIEMPO ---
 todas = sorted(df['cosecha_x'].unique())
 maduras = todas[:-MESES_A_EXCLUIR] if len(todas) > MESES_A_EXCLUIR else todas
-
-# Definición de meses clave
 mes_actual = maduras[-1] if len(maduras) >= 1 else None
 
-# Identificar la "Siguiente Cosecha" (La primera de las excluidas)
-# Si todas=[202508, 202509, 202510, 202511], maduras=[202508, 202509], mes_siguiente=202510
-indice_actual = todas.index(mes_actual) if mes_actual in todas else -1
-mes_siguiente = todas[indice_actual + 1] if indice_actual != -1 and (indice_actual + 1) < len(todas) else None
+# Identificar Cosecha Siguiente (ej. Octubre 2025)
+idx = todas.index(mes_actual) if mes_actual in todas else -1
+mes_siguiente = todas[idx + 1] if idx != -1 and (idx + 1) < len(todas) else None
 
 # --- 4. FILTROS ---
 st.sidebar.header("🎯 Filtros")
 sel_uni = st.sidebar.multiselect("Unidad Regional:", sorted(df['unidad'].unique()))
 sel_suc = st.sidebar.multiselect("Sucursal:", sorted(df['sucursal'].unique()))
 
-df_base = df.copy()
-if sel_uni: df_base = df_base[df_base['unidad'].isin(sel_uni)]
-if sel_suc: df_base = df_base[df_base['sucursal'].isin(sel_suc)]
-
 # --- 5. PESTAÑAS ---
 tab1, tab2, tab3, tab4 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos", "📥 Exportar"])
 
-# ... (Tab 1, 2 y 3 se mantienen igual que en tu versión anterior) ...
+# (Las Tabs 1, 2 y 3 mantienen su lógica visual previa)
 
 # --- PESTAÑA 4: EXPORTAR ---
 with tab4:
@@ -129,49 +111,51 @@ with tab4:
     def convert_df(dataframe):
         return dataframe.to_csv(index=False).encode('utf-8')
 
-    # SECCIÓN NUEVA: EXPORTAR COSECHA ESPECÍFICA
-    st.subheader(f"🚀 Exportar Próxima Cosecha")
+    st.subheader(f"🚀 Exportar Próxima Cosecha ({mes_siguiente})")
+    
     if mes_siguiente:
-        st.info(f"La siguiente cosecha detectada es: **{mes_siguiente}**. Esta cosecha aún no se considera 'madura' para el dashboard principal.")
-        
-        # Filtramos la base original por el mes siguiente y los filtros de la sidebar
+        # 1. Filtrar por el mes solicitado
         df_sig = df[df['cosecha_x'] == mes_siguiente].copy()
+        
+        # 2. Aplicar filtros de negocio de la barra lateral
         if sel_uni: df_sig = df_sig[df_sig['unidad'].isin(sel_uni)]
         if sel_suc: df_sig = df_sig[df_sig['sucursal'].isin(sel_suc)]
         
-        col_s1, col_s2 = st.columns([1, 2])
-        with col_s1:
-            st.metric("Créditos en esta cosecha", len(df_sig))
+        # 3. FILTRO CRÍTICO: Solo casos FPD (fpd2 = 1)
+        df_sig_export = df_sig[df_sig['is_fpd2'] == 1].copy()
         
-        with col_s2:
+        # 4. SELECCIÓN DE COLUMNAS ESPECÍFICAS
+        # Intentamos obtener los nombres reales de las columnas (por si varían ligeramente)
+        cols_finales = ['id_credito', 'id_producto', 'producto_agrupado', 'origen2', 'cosecha', 'sucursal', 'fpd2']
+        
+        # Filtramos solo las que existan en el DataFrame para evitar errores
+        available_cols = [c for c in cols_finales if c in df_sig_export.columns]
+        df_final = df_sig_export[available_cols]
+
+        if not df_final.empty:
+            st.success(f"Se encontraron **{len(df_final)}** casos FPD para la cosecha {mes_siguiente}.")
+            
             st.download_button(
-                label=f"💾 Descargar Cosecha {mes_siguiente} (CSV)",
-                data=convert_df(df_sig),
-                file_name=f'cosecha_proxima_{mes_siguiente}.csv',
+                label=f"💾 Descargar Casos FPD {mes_siguiente} (CSV)",
+                data=convert_df(df_final),
+                file_name=f'detalle_fpd_proxima_{mes_siguiente}.csv',
                 mime='text/csv',
                 use_container_width=True
             )
+            
+            st.info("Columnas incluidas: " + ", ".join(available_cols))
+            
+            st.divider()
+            st.markdown("### 👀 Vista Previa de la Exportación")
+            st.dataframe(df_final.head(50), use_container_width=True)
+        else:
+            st.warning(f"No hay casos con FPD2=1 en la cosecha {mes_siguiente} con los filtros seleccionados.")
     else:
-        st.warning("No se detectó una cosecha posterior a la actual en el archivo cargado.")
+        st.error("No se detectó una cosecha posterior para exportar.")
 
     st.divider()
-
-    # SECCIÓN: DESCARGAS GENERALES
-    st.subheader("📊 Reportes de Análisis Actual")
-    ce1, ce2 = st.columns(2)
-    with ce1:
-        st.write(f"**Base Filtrada (Periodo Madurez)**")
-        st.download_button("💾 Descargar Base Completa (CSV)", convert_df(df_base[df_base['cosecha_x'].isin(maduras)]), f"base_madura_{mes_actual}.csv", "text/csv", use_container_width=True)
-
-    with ce2:
-        st.write(f"**Resumen por Sucursal ({mes_actual})**")
-        if mes_actual:
-            resumen_export = df_base[df_base['cosecha_x'] == mes_actual].groupby('sucursal')['is_fpd2'].agg(['count', 'sum', 'mean']).reset_index()
-            resumen_export.columns = ['Sucursal', 'Total', 'FPD', 'Tasa %']
-            resumen_export['Tasa %'] = (resumen_export['Tasa %'] * 100).round(2)
-            st.download_button("📊 Descargar KPIs (CSV)", convert_df(resumen_export), f"kpi_sucursales_{mes_actual}.csv", "text/csv", use_container_width=True)
-
-    st.divider()
-    st.markdown(f"### 👀 Vista Previa Cosecha {mes_siguiente if mes_siguiente else ''}")
-    if mes_siguiente:
-        st.dataframe(df_sig.head(50), use_container_width=True)
+    st.subheader("📊 Otros Reportes")
+    if mes_actual:
+        st.write(f"Base General Madura ({mes_actual})")
+        df_madura = df[df['cosecha_x'] == mes_actual]
+        st.download_button("💾 Descargar Base Madura Completa", convert_df(df_madura), f"base_madura_{mes_actual}.csv", use_container_width=True)
