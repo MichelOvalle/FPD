@@ -166,7 +166,7 @@ if not df_ranking_base.empty:
 # =========================================================
 # --- PESTAÑAS ---
 # =========================================================
-tab1, tab2, tab3 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos"])
+tab1, tab2, tab3, tab4 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos","exportar"])
 
 # --- PESTAÑA 1: MONITOR FPD ---
 with tab1:
@@ -631,3 +631,5 @@ with tab3:
     )
     
     st.plotly_chart(fig_dual, use_container_width=True)
+with tab4:
+     st.header("📋 Resumen Ejecutivo Global (Sin Filtros)")
