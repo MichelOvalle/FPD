@@ -640,7 +640,7 @@ with tab4:
 
     # 1. Identificar la cosecha "Siguiente" (la última de la lista 'todas')
     if len(todas) > 0:
-        cosecha_objetivo = todas[-1]  # Esto tomaría '202510' si es la última en el archivo
+        cosecha_objetivo = todas[-2]  # Esto tomaría '202510' si es la última en el archivo
         
         # 2. Filtrar el dataframe original (sin los filtros de la sidebar)
         # Queremos los datos puros para exportar
