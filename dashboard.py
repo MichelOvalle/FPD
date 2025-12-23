@@ -632,4 +632,60 @@ with tab3:
     
     st.plotly_chart(fig_dual, use_container_width=True)
 with tab4:
-     st.header("📋 Resumen Ejecutivo Global (Sin Filtros)")
+    st.header("💾 Exportación de Casos Críticos")
+    st.markdown("""
+    En esta sección puedes descargar el listado de créditos que entraron en **FPD2** de la cosecha más reciente 
+    (mes actual/siguiente), útil para gestiones de cobranza inmediata o análisis de originación.
+    """)
+
+    # 1. Identificar la cosecha "Siguiente" (la última de la lista 'todas')
+    if len(todas) > 0:
+        cosecha_objetivo = todas[-1]  # Esto tomaría '202510' si es la última en el archivo
+        
+        # 2. Filtrar el dataframe original (sin los filtros de la sidebar)
+        # Queremos los datos puros para exportar
+        df_export = df[
+            (df['cosecha_x'] == cosecha_objetivo) & 
+            (df['is_fpd2'] == 1)
+        ].copy()
+
+        # 3. Selección y Renombre de columnas solicitadas
+        # Nota: load_data() convierte todo a minúsculas, usamos los nombres normalizados
+        columnas_req = [
+            'id_credito', 'id_segmento', 'id_producto', 
+            'producto_agrupado', 'origen2', 'cosecha', 
+            'monto_otorgado', 'cuota', 'sucursal'
+        ]
+
+        # Validamos que las columnas existan antes de filtrar para evitar errores
+        cols_finales = [c for c in columnas_req if c in df_export.columns]
+        df_final_export = df_export[cols_finales]
+
+        # 4. Interfaz de usuario
+        col_exp1, col_exp2 = st.columns([1, 2])
+        
+        with col_exp1:
+            st.metric("Cosecha a Exportar", cosecha_objetivo)
+            st.metric("Casos FPD2 detectados", len(df_final_export))
+
+        with col_exp2:
+            if not df_final_export.empty:
+                st.success(f"✅ Se han filtrado {len(df_final_export)} registros de {cosecha_objetivo}.")
+                
+                # Botón de descarga CSV
+                csv = df_final_export.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="⬇️ Descargar Listado (CSV)",
+                    data=csv,
+                    file_name=f"FPD2_{cosecha_objetivo}_export.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                # Mostrar vista previa
+                with st.expander("Ver vista previa de los datos"):
+                    st.dataframe(df_final_export.head(10), use_container_width=True)
+            else:
+                st.warning(f"No se encontraron casos de FPD2 para la cosecha {cosecha_objetivo}.")
+    else:
+        st.error("No hay datos disponibles para procesar la exportación.")
