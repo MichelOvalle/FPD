@@ -9,7 +9,7 @@ st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
 st.title("📊 Monitor FPD")
 
 # Configuraciones
-MESES_A_EXCLUIR = 1    
+MESES_A_EXCLUIR = 2    
 VENTANA_MESES = 24     
 MIN_CREDITOS_RANKING = 5 
 
@@ -687,7 +687,7 @@ with tab4:
                     names='Estado',
                     hole=0.4,
                     color='Estado',
-                    color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': "#441d9e"}
+                    color_discrete_map={'Con FPD2': '#d62728', 'Sin FPD2': '#2ca02c'}
                 )
                 # Ajustamos la leyenda para que no ocupe mucho espacio en la columna pequeña
                 fig_pie.update_layout(showlegend=False) 
