@@ -309,8 +309,8 @@ with tab2:
         # mes_actual y mes_anterior están definidos al inicio
         
         # --- BLOQUE 1: UNIDAD REGIONAL (GLOBAL) ---
-        st.markdown(f"#### 🌍 Análisis Regional ({mes_anterior})")
-        df_resumen = df[df['cosecha_x'] == mes_anterior]
+        st.markdown(f"#### 🌍 Análisis Regional ({mes_actual})")
+        df_resumen = df[df['cosecha_x'] == mes_actual]
         df_resumen_clean = df_resumen[~df_resumen['unidad'].astype(str).str.lower().str.contains("pr nominas", case=False)]
         resumen_unidad = df_resumen_clean.groupby('unidad')['is_fpd2'].mean().reset_index()
         
@@ -339,7 +339,7 @@ with tab2:
         st.divider()
 
         # --- BLOQUE 2: PRODUCTOS (GLOBAL) ---
-        st.markdown(f"#### 📦 Análisis de Productos ({mes_anterior})")
+        st.markdown(f"#### 📦 Análisis de Productos ({mes_actual})")
         
         resumen_prod = df_resumen.groupby('producto').agg(
             tasa=('is_fpd2', 'mean'),
@@ -719,5 +719,3 @@ with tab4:
         # 1. Filtrar los datos para la cosecha específica
 cosecha_target = todas[-2]
 df_pie_data = df[df['cosecha_x'] == cosecha_target].copy()
-
-
