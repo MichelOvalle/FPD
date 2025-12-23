@@ -100,21 +100,14 @@ df = load_data()
 
 # --- 3. CONFIGURACIÓN DE VENTANA DE TIEMPO (AHORA FIJA) ---
 todas = sorted(df['cosecha_x'].unique())
-maduras_x= todas[:-MESES_A_EXCLUIR+1] if len(todas)> MESES_A_EXCLUIR+1 else todas
-visualizar_x= maduras_x[-VENTANA_MESES+1:] if len(maduras_x) > VENTANA_MESES+1 else maduras_x
 maduras = todas[:-MESES_A_EXCLUIR] if len(todas) > MESES_A_EXCLUIR else todas
 visualizar = maduras[-VENTANA_MESES:] if len(maduras) > VENTANA_MESES else maduras
 
 sel_cosecha = visualizar
-sel_cosecha_x = visualizar
 
 # Definición de la última cosecha madura
 mes_actual = maduras[-1] if len(maduras) >= 1 else None
 mes_anterior = maduras[-2] if len(maduras) >= 2 else None
-
-mes_actual_x = maduras_x[-1] if len(maduras_x) >= 1 else None
-mes_anterior_x = maduras_x[-2] if len(maduras_x) >= 2 else None
-
 
 # --- 4. FILTROS DE NEGOCIO EN BARRA LATERAL ---
 st.sidebar.header("🎯 Filtros Generales")
@@ -139,7 +132,6 @@ if df_base.empty:
     st.sidebar.warning("⚠️ Los filtros seleccionados no devolvieron datos para el Monitor.")
 
 df_top = df_base[df_base['cosecha_x'].isin(sel_cosecha)]
-df_top_x = df_base[df_base['cosecha_x'].isin(sel_cosecha_x)]
 
 # =========================================================
 # --- CÁLCULO CENTRALIZADO DEL BOTTOM 10 DE SUCURSALES ---
@@ -186,8 +178,8 @@ with tab1:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("1. Tendencia Global")
-            if not df_top_x.empty:
-                d = df_top_x.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
+            if not df_top.empty:
+                d = df_top.groupby('cosecha_x')['is_fpd2'].mean().reset_index()
                 d['FPD2 %'] = d['is_fpd2']*100
                 fig = px.line(d, x='cosecha_x', y='FPD2 %', markers=True, text=d['FPD2 %'].apply(lambda x: f'{x:.1f}%'))
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
@@ -196,7 +188,7 @@ with tab1:
         with col2:
             st.subheader("2. Físico vs Digital")
             mask = df_top['origen'].str.contains('Fisico|Digital', case=False, na=False)
-            d_comp = df_top_x[mask].copy()
+            d_comp = df_top[mask].copy()
             if not d_comp.empty:
                 d = d_comp.groupby(['cosecha_x', 'origen'])['is_fpd2'].mean().reset_index()
                 d['FPD2 %'] = d['is_fpd2']*100
