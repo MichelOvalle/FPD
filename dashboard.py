@@ -8,15 +8,15 @@ import os
 st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
 st.title("📊 Monitor FPD")
 
-# Constantes de Negocio
+# Configuraciones de Negocio
 MESES_A_EXCLUIR = 2    
 VENTANA_MESES = 24     
 MIN_CREDITOS_RANKING = 5 
 
-# --- 2. FUNCIÓN DE CARGA ROBUSTA (Corregida para errores de Excel) ---
+# --- 2. FUNCIÓN DE CARGA ROBUSTA ---
 @st.cache_data 
 def load_data():
-    # Buscador de archivos (insensible a mayúsculas/minúsculas para Linux/Cloud)
+    # Buscador de archivos (insensible a mayúsculas/minúsculas para Linux Cloud)
     archivos_locales = os.listdir('.')
     archivo_objetivo = 'fpd gemini.xlsx'
     
@@ -34,7 +34,7 @@ def load_data():
     
     try:
         if archivo_objetivo.endswith('.xlsx'):
-            # Se agrega engine='openpyxl' para evitar el ValueError detectado
+            # engine='openpyxl' es vital para evitar el ValueError en Streamlit Cloud
             df = pd.read_excel(archivo_objetivo, engine='openpyxl')
         else:
             df = pd.read_csv(archivo_objetivo, encoding='latin1')
@@ -45,7 +45,7 @@ def load_data():
     df.columns = [str(c).lower().strip() for c in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
-    # Función de búsqueda de columnas (Recuperada del código base)
+    # Buscador inteligente de columnas (Lógica original v1.0)
     def find_best_column(dataframe, candidates_priority, fallback_search_term):
         for cand in candidates_priority:
             if cand in dataframe.columns: return cand
@@ -74,7 +74,7 @@ def load_data():
     df_clean['is_np'] = df_clean[col_np].astype(str).apply(lambda x: 1 if 'NP' in x.upper() else 0) if col_np else 0
     df_clean['monto'] = pd.to_numeric(df_clean[col_monto], errors='coerce').fillna(0)
 
-    # Dimensiones normalizadas para filtros
+    # Dimensiones para filtros
     c_suc = find_best_column(df_clean, ['sucursal', 'nombre_sucursal'], 'sucursal')
     df_clean['sucursal'] = df_clean[c_suc].fillna('Sin Dato').astype(str) if c_suc else 'Sin Dato'
     c_uni = find_best_column(df_clean, ['unidad_regional', 'regional', 'region', 'unidad'], 'regional')
@@ -86,7 +86,7 @@ def load_data():
     c_tip = find_best_column(df_clean, ['tipo_cliente', 'tipo'], 'cliente')
     df_clean['tipo_cliente'] = df_clean[c_tip].fillna('Sin Dato').astype(str) if c_tip else 'Sin Dato'
     
-    # Columnas para Exportación (TAB 4)
+    # Preparación de columnas para Exportación (TAB 4)
     df_clean['id_credito'] = df_clean[next((c for c in df.columns if 'id_credito' in c), df.columns[0])]
     df_clean['id_producto'] = df_clean[next((c for c in df.columns if 'id_producto' in c), df.columns[0])]
     df_clean['producto_agrupado'] = df_clean['producto']
@@ -97,7 +97,6 @@ def load_data():
     
     return df_clean
 
-# Cargar DATOS
 df = load_data()
 
 # --- 3. LÓGICA TEMPORAL ---
@@ -111,7 +110,7 @@ mes_anterior = maduras[-2] if len(maduras) >= 2 else None
 idx_actual = todas.index(mes_actual) if mes_actual in todas else -1
 mes_siguiente = todas[idx_actual + 1] if idx_actual != -1 and (idx_actual + 1) < len(todas) else None
 
-# --- 4. FILTROS ---
+# --- 4. FILTROS DE SIDEBAR ---
 st.sidebar.header("🎯 Filtros de Negocio")
 sel_uni = st.sidebar.multiselect("1. Unidad Regional:", sorted(df['unidad'].unique()))
 sel_suc = st.sidebar.multiselect("2. Sucursal:", sorted(df['sucursal'].unique()))
@@ -124,7 +123,7 @@ if sel_suc: df_base = df_base[df_base['sucursal'].isin(sel_suc)]
 if sel_pro: df_base = df_base[df_base['producto'].isin(sel_pro)]
 if sel_tip: df_base = df_base[df_base['tipo_cliente'].isin(sel_tip)]
 
-# --- CÁLCULO BOTTOM 10 ---
+# Cálculo centralizado para el Bottom 10
 worst_10_sucursales = []
 if mes_actual and not df_base.empty:
     df_r = df_base[df_base['cosecha_x'] == mes_actual]
@@ -142,20 +141,26 @@ with tab1:
     with col1:
         st.subheader("1. Evolución % FPD2")
         d_trend = df_base[df_base['cosecha_x'].isin(visualizar)].groupby('cosecha_x')['is_fpd2'].mean().reset_index()
-        fig = px.line(d_trend, x='cosecha_x', y='is_fpd2', markers=True, text=(d_trend['is_fpd2']*100).map("{:.1f}%".format))
+        d_trend['FPD2 %'] = d_trend['is_fpd2'] * 100
+        fig = px.line(d_trend, x='cosecha_x', y='FPD2 %', markers=True, text=d_trend['FPD2 %'].map("{:.1f}%".format))
+        # CORRECCIÓN EJE X
+        fig.update_layout(xaxis_type='category')
         st.plotly_chart(fig, use_container_width=True)
     with col2:
         st.subheader("2. Físico vs Digital")
         d_fd = df_base[df_base['cosecha_x'].isin(visualizar)].groupby(['cosecha_x', 'origen'])['is_fpd2'].mean().reset_index()
-        fig_fd = px.line(d_fd, x='cosecha_x', y='is_fpd2', color='origen', markers=True)
+        d_fd['FPD2 %'] = d_fd['is_fpd2'] * 100
+        fig_fd = px.line(d_fd, x='cosecha_x', y='FPD2 %', color='origen', markers=True)
+        # CORRECCIÓN EJE X
+        fig_fd.update_layout(xaxis_type='category', legend=dict(orientation="h", y=-0.2))
         st.plotly_chart(fig_fd, use_container_width=True)
     
     st.divider()
     st.subheader(f"3. Rankings de Sucursales ({mes_actual})")
     c1, c2 = st.columns(2)
-    config = {"FPD2 %": st.column_config.NumberColumn(format="%.2f%%")}
     if not r_calc.empty:
         r_calc['FPD2 %'] = r_calc['mean'] * 100
+        config = {"FPD2 %": st.column_config.NumberColumn(format="%.2f%%")}
         c1.write("**Top 10 Peores Tasas**")
         c1.dataframe(r_calc.sort_values('mean', ascending=False).head(10)[['sucursal', 'FPD2 %']], hide_index=True, column_config=config, use_container_width=True)
         c2.write("**Top 10 Mejores Tasas**")
@@ -166,7 +171,6 @@ with tab2:
     st.header("📋 Resumen Ejecutivo Global")
     df_exec = df[df['cosecha_x'] == mes_actual]
     
-    # Análisis Regional Cards
     st.markdown(f"#### Análisis Regional ({mes_actual})")
     res_uni = df_exec.groupby('unidad')['is_fpd2'].mean().reset_index()
     if not res_uni.empty:
@@ -176,69 +180,54 @@ with tab2:
         colr2.error(f"🔴 **Mayor Riesgo:** {pr['unidad']} ({pr['is_fpd2']*100:.2f}%)")
 
     st.divider()
-    # Matriz Bottom 10 (Recuperada con formato CSS)
     st.subheader("Detalle Riesgo por Producto/Sucursal (Bottom 10)")
     if worst_10_sucursales:
         df_matriz = df_base[(df_base['cosecha_x'] == mes_actual) & (df_base['sucursal'].isin(worst_10_sucursales))]
         pivot_m = df_matriz.groupby(['sucursal', 'producto']).agg(
-            FPD_Casos=('is_fpd2', 'sum'),
-            Total=('is_fpd2', 'count'),
-            Tasa=('is_fpd2', 'mean')
+            FPD_Casos=('is_fpd2', 'sum'), Total=('is_fpd2', 'count'), Tasa=('is_fpd2', 'mean')
         ).reset_index()
-        pivot_m['Tasa'] = (pivot_m['Tasa'] * 100).map("{:.1f}%".format)
-        
-        # Formatear la tabla para que se vea: (FPD | Total | %)
-        pivot_m['Detalle'] = pivot_m.apply(lambda r: f"{int(r['FPD_Casos'])} | {int(r['Total'])} | {r['Tasa']}", axis=1)
+        pivot_m['Detalle'] = pivot_m.apply(lambda r: f"{int(r['FPD_Casos'])} | {int(r['Total'])} | {(r['Tasa']*100):.1f}%", axis=1)
         final_table = pivot_m.pivot(index='sucursal', columns='producto', values='Detalle').fillna("-")
         
+        # Estilo original: Celeste y Negritas
         st.dataframe(final_table.style.set_table_styles([
             {'selector': 'th', 'props': [('background-color', '#e0f7fa'), ('color', 'black'), ('font-weight', 'bold')]},
             {'selector': 'tbody th', 'props': [('font-weight', 'bold'), ('color', 'black')]}
         ]), use_container_width=True)
 
-# --- TAB 3: INSIGHTS (HEATMAP Y PARETO) ---
+# --- TAB 3: INSIGHTS ---
 with tab3:
     st.header("🎯 Insights Estratégicos")
     col_i1, col_i2 = st.columns(2)
     with col_i1:
         st.subheader("1. Mapa de Riesgo Regional (6m)")
         dh = df[df['cosecha_x'].isin(maduras[-6:])].pivot_table(index='unidad', columns='cosecha_x', values='is_fpd2', aggfunc='mean')
-        st.plotly_chart(px.imshow(dh, text_auto=".1%", color_continuous_scale='RdYlGn_r'), use_container_width=True)
+        fig_h = px.imshow(dh, text_auto=".1%", color_continuous_scale='RdYlGn_r')
+        fig_h.update_xaxes(type='category')
+        st.plotly_chart(fig_h, use_container_width=True)
     with col_i2:
         st.subheader("2. Concentración Pareto")
         dp = df_exec.groupby('sucursal')['is_fpd2'].sum().sort_values(ascending=False).reset_index()
-        st.plotly_chart(px.bar(dp.head(20), x='sucursal', y='is_fpd2', title="Sucursales con más casos (Volumen)"), use_container_width=True)
+        st.plotly_chart(px.bar(dp.head(20), x='sucursal', y='is_fpd2', title="Sucursales con más Casos"), use_container_width=True)
 
-# --- TAB 4: EXPORTAR (TU REQUERIMIENTO FINAL) ---
+# --- TAB 4: EXPORTAR ---
 with tab4:
     st.header("📥 Exportar Próxima Cosecha")
     if mes_siguiente:
-        st.info(f"Cosecha detectada para exportar: **{mes_siguiente}** (Ej: Octubre 2025)")
-        
+        st.info(f"Exportando cosecha: **{mes_siguiente}**")
         df_exp = df[df['cosecha_x'] == mes_siguiente].copy()
+        
+        # Filtros de negocio
         if sel_uni: df_exp = df_exp[df_exp['unidad'].isin(sel_uni)]
         if sel_suc: df_exp = df_exp[df_exp['sucursal'].isin(sel_suc)]
         
-        # Filtros solicitados: fpd2=1
+        # REGLA: Solo fpd2=1 y Columnas específicas
         df_final_exp = df_exp[df_exp['is_fpd2'] == 1]
-        
-        # Selección de las 7 columnas exactas
         cols_final = ['id_credito', 'id_producto', 'producto_agrupado', 'origen2', 'cosecha', 'sucursal', 'fpd2']
-        available_cols = [c for c in cols_final if c in df_final_exp.columns]
-        df_to_download = df_final_exp[available_cols]
+        df_csv = df_final_exp[[c for c in cols_final if c in df_final_exp.columns]]
 
-        st.success(f"Casos encontrados con FPD2=1: **{len(df_to_download)}**")
-        
-        @st.cache_data
-        def to_csv(dataframe): return dataframe.to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label=f"💾 Descargar Casos FPD {mes_siguiente}",
-            data=to_csv(df_to_download),
-            file_name=f"DETALLE_FPD_{mes_siguiente}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-        st.dataframe(df_to_download, use_container_width=True, hide_index=True)
+        st.success(f"Casos encontrados: **{len(df_csv)}**")
+        st.download_button(label="💾 Descargar CSV (FPD=1)", data=df_csv.to_csv(index=False).encode('utf-8'), file_name=f"DETALLE_FPD_{mes_siguiente}.csv", use_container_width=True)
+        st.dataframe(df_csv, use_container_width=True, hide_index=True)
     else:
         st.warning("No hay cosecha posterior para procesar.")
