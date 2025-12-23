@@ -9,7 +9,7 @@ st.set_page_config(page_title="Dashboard FPD2 Pro", layout="wide")
 st.title("📊 Monitor FPD")
 
 # Configuraciones
-MESES_A_EXCLUIR = 2    
+MESES_A_EXCLUIR = 1    
 VENTANA_MESES = 24     
 MIN_CREDITOS_RANKING = 5 
 
