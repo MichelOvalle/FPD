@@ -166,7 +166,7 @@ if not df_ranking_base.empty:
 # =========================================================
 # --- PESTAÑAS ---
 # =========================================================
-tab1, tab2, tab3, tab4 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos","exportar"])
+tab1, tab2, tab3, tab4 = st.tabs(["📉 Monitor FPD", "📋 Resumen Ejecutivo", "🎯 Insights Estratégicos","Exportar"])
 
 # --- PESTAÑA 1: MONITOR FPD ---
 with tab1:
